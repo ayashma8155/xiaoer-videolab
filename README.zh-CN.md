@@ -47,16 +47,55 @@ Xiaoer VideoLab 反着来：
 - **产物** —— `~/Downloads/<标题> [<id>].mp4`（默认 ≤1080p mp4，可配置）。
 - **日志** —— `~/Library/Logs/xiaoer-videolab.log`
 
-## 环境要求
+## 急速版（装过同类工具的人）
 
-- **macOS**（后台服务用 `launchd`；daemon 本身跨平台，手动跑即可）
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) 和 `ffmpeg`：
-  ```bash
-  brew install yt-dlp ffmpeg
-  ```
-- 任意 Chromium 内核浏览器（Chrome / Arc / Edge / Brave / Dia …）
+```bash
+brew install yt-dlp ffmpeg
+git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+cd xiaoer-videolab && ./scripts/install.sh
+# 然后到 chrome://extensions/ 把 extension/ 作为「已解压扩展」加载
+```
 
-## 安装
+---
+
+## 安装 —— 手把手详细版
+
+第一次用？把下面每一步都跟着做。大约 5 分钟，而且**只装这一次**。
+
+### 你需要什么
+
+- 一台 Mac（macOS）。后台服务用 `launchd`。
+- 任意 Chromium 内核浏览器 —— Chrome / Arc / Edge / Brave / Dia。
+- 大约 5 分钟。
+
+**你不需要会编程**，只是复制粘贴几条命令而已。
+
+### 第一部分 · 装「下载引擎」（只装一次）
+
+这个工具本质是给开源下载器 [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) 套了个友好的按钮，真正干活的是它。所以先把它装上。
+
+**A1.** 打开 **「终端」**（Terminal）App。（按 `⌘ 空格`，输入「终端」或 `Terminal`，回车。）
+
+<!-- 截图位: docs/images/01-terminal.png -->
+
+**A2.** 安装 **Homebrew**（Mac 上的软件包管理器）。如果你已经有了，跳到 A3。
+把下面这行粘进终端、回车，按它的提示走：
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+**A3.** 安装 `yt-dlp` 和 `ffmpeg`：
+
+```bash
+brew install yt-dlp ffmpeg
+```
+
+> `ffmpeg` 很重要 —— 没它的话，有些网站只能给你纯音频或低画质，因为视频和音频是**分开的两条流**，要靠 `ffmpeg` 合回去。
+
+### 第二部分 · 装小耳抓视频
+
+**B1.** 还在终端里，把这三行粘进去：
 
 ```bash
 git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
@@ -64,16 +103,56 @@ cd xiaoer-videolab
 ./scripts/install.sh
 ```
 
-安装脚本会按你自己的路径**动态生成** LaunchAgent 并启动 daemon。然后加载扩展：
+**B2.** 成功的话，你会在最后看到这样几行：
 
-1. 打开 `chrome://extensions/`
-2. 右上角打开 **开发者模式**
-3. 点 **加载已解压的扩展程序** → 选 `extension/` 文件夹
-4. 把图标固定到工具栏
+```
+✓ Daemon running at http://127.0.0.1:7788
+  Log: ~/Library/Logs/xiaoer-videolab.log
 
-## 使用
+Next: load the browser extension
+  1. Open chrome://extensions/
+  ...
+```
 
-打开任意视频页 → 点工具栏按钮 → 弹「开始下载」通知，完成后弹「✅ &lt;文件名&gt;」。
+<!-- 截图位: docs/images/02-install-success.png -->
+
+这说明后台下载服务装好了，以后**每次开机自动启动**，你再也不用碰终端。
+
+### 第三部分 · 加上工具栏按钮
+
+浏览器按钮还没上 Chrome 应用商店，所以要手动加载。这是正常且安全的。
+
+**C1.** 新开一个标签页，地址栏输入：`chrome://extensions/`
+（Edge 是 `edge://extensions/`，Arc / Brave 同样是 `chrome://extensions/`。）
+
+**C2.** 打开 **「开发者模式」** —— 在页面**右上角**的开关。
+
+<!-- 截图位: docs/images/03-developer-mode.png -->
+
+**C3.** 点左上角的 **「加载已解压的扩展程序」**，会弹出一个文件夹选择框。
+
+<!-- 截图位: docs/images/04-load-unpacked.png -->
+
+**C4.** 找到你刚才 clone 下来的仓库，选中里面的 **`extension`** 文件夹
+（比如 `xiaoer-videolab/extension`），点「选择」。
+
+扩展列表里就会出现一张 **Xiaoer VideoLab** 的卡片。
+
+<!-- 截图位: docs/images/05-extension-card.png -->
+
+**C5.** 点工具栏上的 **拼图图标**，找到 **Xiaoer VideoLab**，点 **图钉** 把它固定到工具栏上。
+
+<!-- 截图位: docs/images/06-pin-toolbar.png -->
+
+### 第四部分 · 下你的第一个视频
+
+**D1.** 打开任意视频页（YouTube / B站 / X / TikTok …）。
+
+**D2.** 点工具栏上的 **Xiaoer VideoLab** 图标。
+
+<!-- 截图位: docs/images/07-click-button.png -->
+
+**D3.** 会弹「开始下载」通知，下完弹「✅ &lt;文件名&gt;」通知。图标上还会有个小角标：
 
 | 角标 | 含义 |
 |:---:|---|
@@ -81,6 +160,14 @@ cd xiaoer-videolab
 | `✓` | daemon 接单了（下载在后台继续） |
 | `✕` | 连不上 daemon |
 | `!` | daemon 报错（看通知 / 日志） |
+
+<!-- 截图位: docs/images/08-notification.png -->
+
+**D4.** 到 **`~/Downloads`（下载）文件夹**里找你的视频。🎉
+
+<!-- 截图位: docs/images/09-downloads-folder.png -->
+
+搞定 —— 以后就是 **打开视频 → 点一下按钮**，没了。
 
 ## 配置
 

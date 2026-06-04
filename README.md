@@ -47,16 +47,57 @@ permissions and phone home. Xiaoer VideoLab takes the opposite bet:
 - **output** — `~/Downloads/<title> [<id>].mp4` (≤1080p mp4 by default; configurable).
 - **log** — `~/Library/Logs/xiaoer-videolab.log`
 
-## Requirements
+## TL;DR (if you've done this before)
 
-- **macOS** (the background service uses `launchd`; the daemon itself is cross-platform if you run it by hand)
-- [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) and `ffmpeg`:
-  ```bash
-  brew install yt-dlp ffmpeg
-  ```
-- A Chromium-based browser (Chrome, Arc, Edge, Brave, Dia …)
+```bash
+brew install yt-dlp ffmpeg
+git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+cd xiaoer-videolab && ./scripts/install.sh
+# then load extension/ as an unpacked extension at chrome://extensions/
+```
 
-## Install
+---
+
+## Installation — step by step
+
+First time? Follow every step below. It takes about 5 minutes and you only do it once.
+
+### What you need
+
+- A Mac (macOS). The background service uses `launchd`.
+- A Chromium-based browser — Chrome, Arc, Edge, Brave, or Dia.
+- About 5 minutes.
+
+You do **not** need to know how to code. You will copy-paste a few commands.
+
+### Part A · Install the engine (one-time)
+
+This tool is a friendly button in front of [`yt-dlp`](https://github.com/yt-dlp/yt-dlp), the open-source
+downloader that does the real work. So you install that first.
+
+**A1.** Open the **Terminal** app. (Press `⌘ Space`, type `Terminal`, hit Enter.)
+
+<!-- 截图位: docs/images/01-terminal.png -->
+
+**A2.** Install **Homebrew** (a package manager for Mac). If you already have it, skip to A3.
+Paste this into Terminal and press Enter, then follow its prompts:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+**A3.** Install `yt-dlp` and `ffmpeg`:
+
+```bash
+brew install yt-dlp ffmpeg
+```
+
+> `ffmpeg` matters — without it some sites give you audio-only or low quality, because the video and
+> audio come as separate streams that `ffmpeg` merges back together.
+
+### Part B · Install Xiaoer VideoLab
+
+**B1.** Still in Terminal, paste these three lines:
 
 ```bash
 git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
@@ -64,17 +105,59 @@ cd xiaoer-videolab
 ./scripts/install.sh
 ```
 
-The installer **generates** a LaunchAgent for your own paths and starts the daemon. Then load the extension:
+**B2.** When it works, the last lines you see will look like this:
 
-1. Open `chrome://extensions/`
-2. Turn on **Developer mode** (top-right)
-3. Click **Load unpacked** → choose the `extension/` folder
-4. Pin the icon to your toolbar
+```
+✓ Daemon running at http://127.0.0.1:7788
+  Log: ~/Library/Logs/xiaoer-videolab.log
 
-## Use
+Next: load the browser extension
+  1. Open chrome://extensions/
+  ...
+```
 
-Open any video page → click the toolbar button → you'll get a "Downloading…" notification, then
-"✅ &lt;filename&gt;" when it's done.
+<!-- 截图位: docs/images/02-install-success.png -->
+
+That means the background downloader is installed and will start automatically every time you log in.
+You never touch the Terminal again.
+
+### Part C · Add the toolbar button
+
+The browser button isn't on the Chrome Web Store (yet), so you load it manually. This is normal and safe.
+
+**C1.** Open a new browser tab and go to: `chrome://extensions/`
+(On Edge it's `edge://extensions/`, on Arc/Brave the same `chrome://extensions/`.)
+
+**C2.** Turn on **Developer mode** — the switch in the **top-right** corner.
+
+<!-- 截图位: docs/images/03-developer-mode.png -->
+
+**C3.** Click the **Load unpacked** button (top-left). A folder picker opens.
+
+<!-- 截图位: docs/images/04-load-unpacked.png -->
+
+**C4.** Navigate to where you cloned the repo and select the **`extension`** folder inside it
+(e.g. `xiaoer-videolab/extension`). Click **Select**.
+
+A card titled **Xiaoer VideoLab** now appears in your extensions list.
+
+<!-- 截图位: docs/images/05-extension-card.png -->
+
+**C5.** Click the **puzzle-piece icon** in your toolbar, find **Xiaoer VideoLab**, and click the **pin**
+so its icon stays on the toolbar.
+
+<!-- 截图位: docs/images/06-pin-toolbar.png -->
+
+### Part D · Download your first video
+
+**D1.** Open any video page (YouTube, Bilibili, X, TikTok …).
+
+**D2.** Click the **Xiaoer VideoLab** icon in your toolbar.
+
+<!-- 截图位: docs/images/07-click-button.png -->
+
+**D3.** You'll get a **"Downloading…"** notification, then a **"✅ &lt;filename&gt;"** notification when it's done.
+The icon also shows a little badge:
 
 | Badge | Meaning |
 |:---:|---|
@@ -82,6 +165,14 @@ Open any video page → click the toolbar button → you'll get a "Downloading�
 | `✓` | daemon accepted the job (download continues in the background) |
 | `✕` | can't reach the daemon |
 | `!` | daemon returned an error (check the notification / log) |
+
+<!-- 截图位: docs/images/08-notification.png -->
+
+**D4.** Find your video in the **`~/Downloads`** folder. 🎉
+
+<!-- 截图位: docs/images/09-downloads-folder.png -->
+
+That's it — from now on it's just **open a video → click the button**.
 
 ## Configuration
 
