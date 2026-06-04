@@ -14,7 +14,8 @@
 ![Python stdlib only](https://img.shields.io/badge/Python-仅标准库-3776AB?logo=python&logoColor=white)
 ![localhost only](https://img.shields.io/badge/网络-仅本机-27ae60)
 
-[English](README.md) · **简体中文**
+[![English](https://img.shields.io/badge/lang-English-lightgrey)](README.md)&nbsp;
+[![简体中文](https://img.shields.io/badge/lang-简体中文-2563eb)](README.zh-CN.md)
 
 </div>
 
@@ -248,6 +249,23 @@ curl -X POST http://127.0.0.1:7788/download \
 它是 **小耳** 工具箱的一员，同门还有
 [小耳 Ask](https://github.com/Jane-xiaoer/xiaoer-ask) 和
 [小耳一键改名 Smart Rename](https://github.com/Jane-xiaoer/smart-rename)。
+
+## 📱 关注作者 / Follow Me
+
+如果这个仓库对你有帮助，欢迎关注我。后面我会持续更新更多 AI Skill、做网站、自动化工作流和创意项目。
+
+If this repo helped you, follow me for more AI skills, website building, automation workflows, and creative projects.
+
+- X (Twitter): [@xiaoerzhan](https://x.com/xiaoerzhan)
+- 微信公众号 / WeChat Official Account: 扫码关注 / Scan to follow
+
+<p align="center">
+  <img src="./follow-wechat-qrcode.jpg" alt="Jane WeChat Official Account QR code" width="300" />
+</p>
+
+<p align="center"><strong>中文：</strong>欢迎关注我的公众号，一起研究 AI Skill、网站搭建、自动化流程和创意实验。</p>
+
+<p align="center"><strong>English:</strong> Follow my WeChat Official Account for more AI skills, website building, automation workflows, and creative experiments.</p>
 
 ## 致谢
 

@@ -14,7 +14,8 @@ Powered by a tiny local [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) daemon — 
 ![Python stdlib only](https://img.shields.io/badge/Python-stdlib%20only-3776AB?logo=python&logoColor=white)
 ![No tracking](https://img.shields.io/badge/network-localhost%20only-27ae60)
 
-**English** · [简体中文](README.zh-CN.md)
+[![English](https://img.shields.io/badge/lang-English-2563eb)](README.md)&nbsp;
+[![简体中文](https://img.shields.io/badge/lang-简体中文-lightgrey)](README.zh-CN.md)
 
 </div>
 
@@ -258,6 +259,23 @@ manifest, a Linux service file), send it over.
 Part of the **Xiaoer** toolbox, alongside
 [Xiaoer Ask](https://github.com/Jane-xiaoer/xiaoer-ask) and
 [Smart Rename](https://github.com/Jane-xiaoer/smart-rename).
+
+## 📱 关注作者 / Follow Me
+
+如果这个仓库对你有帮助，欢迎关注我。后面我会持续更新更多 AI Skill、做网站、自动化工作流和创意项目。
+
+If this repo helped you, follow me for more AI skills, website building, automation workflows, and creative projects.
+
+- X (Twitter): [@xiaoerzhan](https://x.com/xiaoerzhan)
+- 微信公众号 / WeChat Official Account: 扫码关注 / Scan to follow
+
+<p align="center">
+  <img src="./follow-wechat-qrcode.jpg" alt="Jane WeChat Official Account QR code" width="300" />
+</p>
+
+<p align="center"><strong>中文：</strong>欢迎关注我的公众号，一起研究 AI Skill、网站搭建、自动化流程和创意实验。</p>
+
+<p align="center"><strong>English:</strong> Follow my WeChat Official Account for more AI skills, website building, automation workflows, and creative experiments.</p>
 
 ## Acknowledgements
 
