@@ -122,6 +122,10 @@ Next: load the browser extension
 
 浏览器按钮还没上 Chrome 应用商店，所以要手动加载。这是正常且安全的。
 
+> 下面这张图把这一部分的四步都标好了，对照红字操作最直观：
+
+![加载扩展的四个步骤：打开地址 → 开启开发者模式 → 加载已解压 → 打开开关](docs/images/load-extension-steps.png)
+
 **C1.** 新开一个标签页，地址栏输入：`chrome://extensions/`
 （Edge 是 `edge://extensions/`，Arc / Brave 同样是 `chrome://extensions/`。）
 

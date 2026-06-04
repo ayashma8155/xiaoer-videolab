@@ -125,6 +125,12 @@ You never touch the Terminal again.
 
 The browser button isn't on the Chrome Web Store (yet), so you load it manually. This is normal and safe.
 
+> The screenshot below marks every step in this part (labels are in Chinese, but the red arrows
+> point at exactly the right buttons): **① open the address · ② turn on Developer mode ·
+> ③ click "Load unpacked" · ④ flip the extension's switch on.**
+
+![Four steps to load the extension: open the address, enable Developer mode, Load unpacked, toggle on](docs/images/load-extension-steps.png)
+
 **C1.** Open a new browser tab and go to: `chrome://extensions/`
 (On Edge it's `edge://extensions/`, on Arc/Brave the same `chrome://extensions/`.)
 
