@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Xiaoer VideoLab",
+  "version": "1.0.0",
+  "description": "One click on the toolbar grabs the current page's video into ~/Downloads, via a local yt-dlp daemon. 一键把当前页视频抓到本地。",
+  "permissions": ["activeTab", "notifications"],
+  "host_permissions": ["http://127.0.0.1:7788/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Xiaoer VideoLab — grab this page's video",
+    "default_icon": {
+      "16": "icon-16.png",
+      "48": "icon-48.png",
+      "128": "icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
+}
