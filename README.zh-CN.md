@@ -180,7 +180,7 @@ Next: load the browser extension
 
 | 变量 | 默认 | 作用 |
 |---|---|---|
-| `VIDEOLAB_PORT` | `7788` | daemon 端口 |
+| `VIDEOLAB_PORT` | `7788` | daemon 端口 —— ⚠️ 改了它，必须**同时**改 `extension/background.js`（`DAEMON`）和 `extension/manifest.json`（`host_permissions`）成同一个端口，否则按钮连不上 daemon |
 | `VIDEOLAB_DOWNLOADS` | `~/Downloads` | 下载目录 |
 | `VIDEOLAB_YT_DLP` | 自动探测 | `yt-dlp` 二进制路径 |
 | `VIDEOLAB_PREFIX` | _（无）_ | 文件名前缀，比如 `小耳-` |

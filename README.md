@@ -187,7 +187,7 @@ All optional — set them and re-run `./scripts/install.sh` to bake them into th
 
 | Variable | Default | What it does |
 |---|---|---|
-| `VIDEOLAB_PORT` | `7788` | daemon port |
+| `VIDEOLAB_PORT` | `7788` | daemon port — ⚠️ if you change it, also edit `extension/background.js` (`DAEMON`) **and** `extension/manifest.json` (`host_permissions`) to the same port, or the button can't reach the daemon |
 | `VIDEOLAB_DOWNLOADS` | `~/Downloads` | where files land |
 | `VIDEOLAB_YT_DLP` | auto-detect | path to the `yt-dlp` binary |
 | `VIDEOLAB_PREFIX` | _(none)_ | filename prefix, e.g. `小耳-` |
