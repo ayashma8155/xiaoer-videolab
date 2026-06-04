@@ -8,6 +8,7 @@ Press one toolbar button and the video on the current page lands in your `~/Down
 Powered by a tiny local [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) daemon — **1800+ sites** out of the box
 (YouTube · Bilibili · X/Twitter · TikTok · Vimeo · Twitch · Weibo …).
 
+[![CI](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml/badge.svg)](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 ![Manifest V3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)
@@ -225,9 +226,12 @@ curl -X POST http://127.0.0.1:7788/download \
 ## Security
 
 - The daemon binds to `127.0.0.1` only — it is not reachable from your network.
-- CORS is `*` because it's a localhost-only port with no secrets. If you want to stop *other local
-  processes* from posting to it, add a shared `X-Token` header check in `daemon/server.py`.
-- The extension's only host permission is `http://127.0.0.1:7788/*`.
+- **No drive-by downloads.** `/download` rejects any request carrying an `http(s)` `Origin` header,
+  so a malicious web page's JavaScript cannot make the daemon download files behind your back. The
+  extension (`chrome-extension://`) and command-line calls (no Origin) are allowed.
+- The extension's only host permission is `http://127.0.0.1:7788/*`. It reads only the current tab's
+  URL when you click — no page content, no content scripts.
+- If you also want to block *other local processes*, add a shared `X-Token` header check in `daemon/server.py`.
 
 ## FAQ
 

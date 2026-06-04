@@ -162,6 +162,18 @@ class Handler(BaseHTTPRequestHandler):
             self._cors()
             self.end_headers()
             return
+        # Security: stop drive-by downloads. A real web page that tries to call us
+        # carries an http(s) Origin header — refuse those. The extension sends
+        # Origin: chrome-extension://..., and curl/CLI send none — both allowed.
+        origin = self.headers.get("Origin", "")
+        if origin.startswith(("http://", "https://")):
+            self.send_response(403)
+            self._cors()
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"forbidden: web-page origins cannot trigger downloads")
+            log(f"[blocked] web origin {origin} tried to POST /download")
+            return
         length = int(self.headers.get("Content-Length", 0))
         raw = self.rfile.read(length).decode("utf-8", "replace")
         try:

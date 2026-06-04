@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.1 — 2026-06-04
+
+- **Security:** `/download` now rejects requests with an `http(s)` `Origin` header, blocking
+  drive-by downloads from malicious web pages. Extension and CLI calls are unaffected.
+- Docs: note that changing `VIDEOLAB_PORT` also requires editing the extension.
+- CI: GitHub Actions now lints the code and smoke-tests the daemon (boot + endpoint behavior)
+  on every push.
+
 ## 1.0.0 — 2026-06-03
 
 First public release.

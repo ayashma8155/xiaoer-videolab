@@ -8,6 +8,7 @@
 底层是一个超小的本地 [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) 守护进程 —— 开箱即通 **1800+ 网站**
 （YouTube · B站 · X/Twitter · TikTok · Vimeo · Twitch · 微博 …）。
 
+[![CI](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml/badge.svg)](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/平台-macOS-lightgrey)
 ![Manifest V3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)
@@ -218,9 +219,11 @@ curl -X POST http://127.0.0.1:7788/download \
 ## 安全
 
 - daemon 只绑定 `127.0.0.1`，外网打不到。
-- CORS 设为 `*`，因为这是无密钥的本机端口。如果担心*同机其他进程*乱发，
-  在 `daemon/server.py` 里加一个共享 `X-Token` 校验即可。
-- 扩展唯一的主机权限是 `http://127.0.0.1:7788/*`。
+- **杜绝偷偷下载（drive-by download）**：`/download` 会拒绝任何带 `http(s)` `Origin` 头的请求，
+  所以你访问的恶意网页的 JavaScript **没法背着你让 daemon 下文件**。扩展（`chrome-extension://`）
+  和命令行调用（无 Origin）正常放行。
+- 扩展唯一的主机权限是 `http://127.0.0.1:7788/*`，点击时只读当前标签页的网址——不读页面内容、无 content script。
+- 如果还想挡*同机其他进程*，在 `daemon/server.py` 里加一个共享 `X-Token` 校验即可。
 
 ## 常见问题
 
