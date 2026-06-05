@@ -86,6 +86,26 @@ PLIST
 
 launchctl load "$PLIST_DST"
 
+# ── Native Messaging Host for one-click daemon start from the extension ──
+# NOTE: com.xiaoer.videolab.json has a hardcoded allowed_origins extension ID
+# (objlebheicdclpopinghmbnfdilkmhpd). If you load the extension from a
+# different path, the ID will differ and native messaging will silently fail.
+# To fix: run `chrome.runtime.id` in the extension console and update the
+# allowed_origins in ~/Library/Application Support/*/NativeMessagingHosts/
+# com.xiaoer.videolab.json accordingly.
+NM_SRC="$PROJECT_DIR/daemon/com.xiaoer.videolab.json"
+NM_DIRS=(
+  "$HOME/Library/Application Support/Google/Chrome/NativeMessagingHosts"
+  "$HOME/Library/Application Support/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+  "$HOME/Library/Application Support/Microsoft Edge/NativeMessagingHosts"
+  "$HOME/Library/Application Support/Arc/User Data/NativeMessagingHosts"
+)
+for nm_dir in "${NM_DIRS[@]}"; do
+  mkdir -p "$nm_dir"
+  sed "s|__HOST_PATH__|${PROJECT_DIR}/daemon/native-host.py|g" "$NM_SRC" > "$nm_dir/com.xiaoer.videolab.json"
+  echo "  → Native host: $nm_dir/com.xiaoer.videolab.json"
+done
+
 echo "→ Waiting for the daemon to come up..."
 for _ in $(seq 1 10); do
   if curl -fsS http://127.0.0.1:7788/health >/dev/null 2>&1; then

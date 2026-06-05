@@ -1,0 +1,480 @@
+// Xiaoer VideoLab — popup: history, download, quick-open
+const DAEMON = "http://127.0.0.1:7788";
+const STORAGE_KEY = "videolab_pending";
+const CACHE_KEY = "videolab_cache";
+const LOCALE_KEY = "videolab_locale";
+
+// ── i18n ─────────────────────────────────────────────
+
+let _locale = "en";
+
+const LOCALES = {
+  en: {
+    history: "History", emptyTitle: "No downloads yet",
+    emptyHint: "Click below to download a video",
+    offlineTitle: "Daemon not running",
+    offlineHint: "Click below to start the service",
+    startBtn: "Start Service", download: "Download Video",
+    detecting: "Detecting...", files: "{n} file(s)",
+    done: "Done", downloading: "Downloading", queued: "Queued", failed: "Failed",
+    play: "Play", openFolder: "Open Folder", redownload: "Redownload", retry: "Retry",
+    sent: "Download request sent", started: "Daemon started",
+    startFailed: "Start failed: {msg}", notInstalled: "Run install.sh first",
+    daemonError: "Daemon returned {code}", daemonOfflineMsg: "Cannot reach daemon",
+    justNow: "just now", minAgo: "{n} min ago", hrAgo: "{n} hr ago", dayAgo: "{n} day ago",
+    today: "Today", yesterday: "Yesterday", earlier: "Earlier",
+  },
+  zh: {
+    history: "记录", emptyTitle: "还没有下载记录",
+    emptyHint: "点击下方按钮下载当前页视频",
+    offlineTitle: "Daemon 未运行",
+    offlineHint: "点击下方按钮启动下载服务",
+    startBtn: "启动服务", download: "下载视频",
+    detecting: "检测中...", files: "{n} 个文件",
+    done: "完成", downloading: "下载中", queued: "等待中", failed: "失败",
+    play: "播放", openFolder: "打开文件夹", redownload: "重下", retry: "重试",
+    sent: "下载请求已发送", started: "Daemon 已启动",
+    startFailed: "启动失败: {msg}", notInstalled: "需要先运行 install.sh",
+    daemonError: "服务返回 {code}", daemonOfflineMsg: "无法连接到 daemon",
+    justNow: "刚刚", minAgo: "{n} 分钟前", hrAgo: "{n} 小时前", dayAgo: "{n} 天前",
+    today: "今天", yesterday: "昨天", earlier: "更早",
+  },
+};
+
+function t(key, args) {
+  const text = (LOCALES[_locale] || LOCALES.en)[key] || key;
+  if (!args) return text;
+  return text.replace(/\{(\w+)\}/g, (_, k) => args[k] !== undefined ? args[k] : `{${k}}`);
+}
+
+async function setLocale(locale) {
+  _locale = locale;
+  await chrome.storage.local.set({ [LOCALE_KEY]: locale });
+  applyTranslations();
+}
+
+function applyTranslations() {
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  const toggle = document.getElementById("localeToggle");
+  if (toggle) toggle.textContent = _locale === "en" ? "EN" : "中文";
+}
+
+// ── SVG icons ───────────────────────────────────────
+
+const ICONS = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>',
+  reveal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+  redownload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+};
+
+let currentTabUrl = "";
+let currentTabTitle = "";
+let pollTimer = null;
+
+// ── init ──────────────────────────────────────────────
+
+document.addEventListener("DOMContentLoaded", async () => {
+  // Restore locale
+  const { [LOCALE_KEY]: saved } = await chrome.storage.local.get(LOCALE_KEY);
+  if (saved && LOCALES[saved]) _locale = saved;
+  applyTranslations();
+
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  currentTabUrl = tab?.url || "";
+  currentTabTitle = tab?.title || "";
+
+  // Intelligent video detection
+  const btn = document.getElementById("downloadBtn");
+  if (/^https?:/.test(currentTabUrl)) {
+    btn.disabled = false;
+    if (isLikelyVideoSite(currentTabUrl)) {
+      setBtnLabel(t("download"), false);
+    } else {
+      setBtnLabel(t("detecting"), true);
+    }
+    probeVideo(currentTabUrl).then(hasVideo => {
+      if (hasVideo === true) {
+        setBtnLabel(t("download"), false);
+      } else if (hasVideo === false) {
+        setBtnLabel(t("download"), false);
+        btn.title = "No video detected, you can still try";
+      }
+    });
+  } else {
+    btn.disabled = true;
+    btn.title = "Not an http(s) page";
+    setBtnLabel(t("download"), true);
+  }
+
+  document.getElementById("downloadBtn").addEventListener("click", onDownload);
+
+  const startBtn = document.getElementById("startDaemonBtn");
+  if (startBtn) startBtn.addEventListener("click", onStartDaemon);
+
+  // Locale toggle
+  document.getElementById("localeToggle").addEventListener("click", () => {
+    setLocale(_locale === "en" ? "zh" : "en");
+  });
+
+  await loadHistory();
+});
+
+window.addEventListener("beforeunload", stopPolling);
+
+// ── history loading ───────────────────────────────────
+
+async function loadHistory() {
+  hide("daemonOffline");
+
+  const { [CACHE_KEY]: cached } = await chrome.storage.local.get(CACHE_KEY);
+  const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
+
+  if (cached && cached.length > 0) {
+    renderHistory(cached);
+  } else if (pending.length > 0) {
+    renderHistory(pending);
+  } else {
+    show("emptyState");
+    applyTranslations(); // ensure empty state text is in current locale
+  }
+
+  // Fetch fresh data from daemon in the background
+  let daemonEntries = [];
+  let daemonOnline = false;
+
+  try {
+    const res = await fetch(`${DAEMON}/history`, { signal: AbortSignal.timeout(3000) });
+    if (res.ok) {
+      daemonEntries = await res.json();
+      daemonOnline = true;
+    }
+  } catch { /* daemon offline */ }
+
+  const daemonByUrl = {};
+  for (const e of daemonEntries) daemonByUrl[e.url] = e;
+
+  const activePending = pending.filter(p => {
+    const d = daemonByUrl[p.url];
+    return !d || d.status === "queued" || d.status === "downloading";
+  });
+
+  await chrome.storage.local.set({ [STORAGE_KEY]: activePending });
+
+  const seen = new Set();
+  const combined = [];
+  for (const p of activePending) { combined.push(p); seen.add(p.url); }
+  for (const d of daemonEntries) { if (!seen.has(d.url)) { combined.push(d); seen.add(d.url); } }
+
+  if (combined.length === 0) {
+    if (!cached || cached.length === 0) {
+      if (!daemonOnline) { show("daemonOffline"); applyTranslations(); return; }
+      show("emptyState"); applyTranslations(); return;
+    }
+    return;
+  }
+
+  await chrome.storage.local.set({ [CACHE_KEY]: combined });
+  if (cached && JSON.stringify(cached) === JSON.stringify(combined)) return;
+  renderHistory(combined);
+
+  if (activePending.length > 0) startPolling();
+  else stopPolling();
+}
+
+// ── render ────────────────────────────────────────────
+
+function renderHistory(entries) {
+  hide("emptyState");
+  hide("daemonOffline");
+  const container = document.getElementById("historyList");
+  container.innerHTML = "";
+
+  const doneCount = entries.filter(e => e.status === "done").length;
+  document.getElementById("counter").textContent = doneCount ? t("files", { n: doneCount }) : "";
+
+  const groups = {};
+  const now = Date.now();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  for (const e of entries) {
+    const ts = new Date(e.timestamp || now).getTime();
+    let label;
+    if (ts >= todayStart.getTime()) label = t("today");
+    else if (ts >= yesterdayStart.getTime()) label = t("yesterday");
+    else label = t("earlier");
+    if (!groups[label]) groups[label] = [];
+    groups[label].push(e);
+  }
+
+  const order = [t("today"), t("yesterday"), t("earlier")];
+  for (const label of order) {
+    if (!groups[label]) continue;
+    const groupEl = document.createElement("div");
+    groupEl.className = "date-group";
+    groupEl.innerHTML = `<div class="date-label">${escHtml(label)}</div>`;
+    for (const item of groups[label]) groupEl.appendChild(createItem(item));
+    container.appendChild(groupEl);
+  }
+}
+
+function createItem(item) {
+  const el = document.createElement("div");
+  el.className = "history-item";
+
+  const title = extractTitle(item);
+  const host = safeUrl(item.url, (u) => u.hostname.replace(/^www\./, ""));
+  const time = formatTime(item.timestamp);
+
+  let statusDot, statusLabel, statusClass;
+  switch (item.status) {
+    case "done": statusDot = "dot-done"; statusLabel = t("done"); statusClass = "status-done"; break;
+    case "downloading": statusDot = "dot-pending"; statusLabel = t("downloading"); statusClass = "status-pending"; break;
+    case "queued": statusDot = "dot-pending"; statusLabel = t("queued"); statusClass = "status-pending"; break;
+    case "failed": statusDot = "dot-failed"; statusLabel = t("failed"); statusClass = "status-failed"; break;
+    default: statusDot = ""; statusLabel = item.status || ""; statusClass = "";
+  }
+
+  el.innerHTML = `
+    <div class="item-content">
+      <div class="item-title" title="${escAttr(title)}">${escHtml(title)}</div>
+      <div class="item-meta">
+        <span class="status ${statusClass}" title="${statusLabel}"><span class="dot ${statusDot}"></span></span>
+        <span class="item-url">${escHtml(host)}</span>
+        <span class="item-time">${time}</span>
+      </div>
+    </div>
+    <span class="item-actions" data-url="${escAttr(item.url)}" data-path="${escAttr(item.filepath || "")}"></span>
+  `;
+
+  const actionsDiv = el.querySelector(".item-actions");
+  if (item.status === "done" && item.filepath) {
+    addAction(actionsDiv, ICONS.play, t("play"), () => sendToDaemon("POST", "/open", { path: item.filepath }));
+    addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => sendToDaemon("POST", "/reveal", { path: item.filepath }));
+    addAction(actionsDiv, ICONS.redownload, t("redownload"), () => startDownload(item.url, item.title));
+  } else if (item.status === "failed") {
+    addAction(actionsDiv, ICONS.retry, t("retry"), () => startDownload(item.url, item.title));
+  }
+  return el;
+}
+
+function addAction(parent, svg, tooltip, handler) {
+  const btn = document.createElement("button");
+  btn.className = "action-btn icon-only";
+  btn.dataset.tooltip = tooltip;
+  btn.innerHTML = svg;
+  btn.addEventListener("click", handler);
+  parent.appendChild(btn);
+}
+
+// ── download ──────────────────────────────────────────
+
+async function onDownload() {
+  if (!currentTabUrl) return;
+  await startDownload(currentTabUrl, currentTabTitle);
+}
+
+async function onStartDaemon() {
+  const btn = document.getElementById("startDaemonBtn");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = t("detecting");
+  try {
+    const port = chrome.runtime.connectNative("com.xiaoer.videolab");
+    port.onMessage.addListener((msg) => {
+      if (msg.ok) {
+        btn.textContent = "✓ " + t("started");
+        btn.classList.add("copied");
+        showMsg(t("started"), "success");
+        setTimeout(async () => {
+          try {
+            const res = await fetch(`${DAEMON}/health`);
+            if (res.ok) { hide("daemonOffline"); await loadHistory(); }
+          } catch {}
+        }, 2000);
+      } else {
+        btn.textContent = t("failed");
+        showMsg(t("startFailed", { msg: msg.error || "" }), "error");
+        btn.disabled = false;
+      }
+      setTimeout(() => { btn.textContent = t("startBtn"); btn.classList.remove("copied"); btn.disabled = false; }, 3000);
+    });
+    port.onDisconnect.addListener(() => {
+      if (chrome.runtime.lastError) {
+        btn.textContent = t("failed");
+        showMsg(t("notInstalled"), "error");
+        btn.disabled = false;
+        setTimeout(() => { btn.textContent = t("startBtn"); }, 3000);
+      }
+    });
+    port.postMessage({ action: "start" });
+  } catch (e) {
+    btn.textContent = t("failed");
+    showMsg(t("startFailed", { msg: e.message }), "error");
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = t("startBtn"); }, 3000);
+  }
+}
+
+async function startDownload(url, titleHint) {
+  const btn = document.getElementById("downloadBtn");
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${t("detecting")}`;
+
+  chrome.action.setBadgeText({ text: "…" });
+  chrome.action.setBadgeBackgroundColor({ color: "#666" });
+
+  try {
+    const res = await fetch(`${DAEMON}/download`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (res.status === 202) {
+      const id = simpleHash(url);
+      const proxyTitle = titleHint || safeUrl(url, (u) => u.hostname.replace(/^www\./, ""));
+      const entry = { id, url, title: proxyTitle, status: "queued", timestamp: new Date().toISOString() };
+      const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
+      pending.unshift(entry);
+      await chrome.storage.local.set({ [STORAGE_KEY]: pending });
+      chrome.action.setBadgeText({ text: "✓" });
+      chrome.action.setBadgeBackgroundColor({ color: "#27ae60" });
+      setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3500);
+      showMsg(t("sent"), "success");
+      await loadHistory();
+      startPolling();
+    } else {
+      const txt = await res.text();
+      chrome.action.setBadgeText({ text: "!" });
+      chrome.action.setBadgeBackgroundColor({ color: "#e67e22" });
+      showMsg(t("daemonError", { code: res.status }), "error");
+    }
+  } catch {
+    chrome.action.setBadgeText({ text: "✕" });
+    chrome.action.setBadgeBackgroundColor({ color: "#c0392b" });
+    showMsg(t("daemonOfflineMsg"), "error");
+  }
+
+  btn.disabled = /^https?:/.test(currentTabUrl);
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${t("download")}`;
+}
+
+// ── polling ───────────────────────────────────────────
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
+    if (pending.length === 0) { stopPolling(); return; }
+    await loadHistory();
+  }, 5000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+// ── helpers ───────────────────────────────────────────
+
+async function sendToDaemon(method, path, body) {
+  try {
+    await fetch(`${DAEMON}${path}`, {
+      method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+  } catch { /* silent */ }
+}
+
+function showMsg(text, type) {
+  const el = document.getElementById("statusMsg");
+  if (!el) return;
+  el.textContent = text;
+  el.className = `status-msg ${type}`;
+  el.classList.remove("hidden");
+  setTimeout(() => el.classList.add("hidden"), 3000);
+}
+
+function show(id) { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); }
+function hide(id) { const el = document.getElementById(id); if (el) el.classList.add("hidden"); }
+
+function setBtnLabel(text, disabled) {
+  const btn = document.getElementById("downloadBtn");
+  if (!btn) return;
+  btn.disabled = disabled;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${text}`;
+}
+
+function formatTime(iso) {
+  if (!iso) return "";
+  const diff = Date.now() - new Date(iso).getTime();
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return t("justNow");
+  const min = Math.floor(sec / 60);
+  if (min < 60) return t("minAgo", { n: min });
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return t("hrAgo", { n: hrs });
+  const days = Math.floor(hrs / 24);
+  return t("dayAgo", { n: days });
+}
+
+function extractTitle(item) {
+  if (item.title) return item.title;
+  if (item.filename) {
+    const cleaned = item.filename.replace(/\.\w+$/, "").replace(/\s\[[\w-]+]$/, "");
+    if (cleaned) return cleaned;
+  }
+  try { return new URL(item.url).hostname.replace(/^www\./, ""); }
+  catch { return "Unknown"; }
+}
+
+// NOTE: also duplicated in background.js — keep in sync
+function simpleHash(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const c = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + c; hash |= 0;
+  }
+  return Math.abs(hash).toString(36).slice(0, 8);
+}
+
+function safeUrl(url, fn) { try { return fn(new URL(url)); } catch { return url || ""; } }
+
+function escHtml(s) {
+  if (!s) return "";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function escAttr(s) {
+  if (!s) return "";
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+// ── video detection ────────────────────────────────
+
+function isLikelyVideoSite(url) {
+  try {
+    const host = new URL(url).hostname;
+    const sites = [
+      "youtube.com", "youtu.be", "bilibili.com", "b23.tv",
+      "twitter.com", "x.com", "tiktok.com", "douyin.com",
+      "vimeo.com", "twitch.tv", "instagram.com", "facebook.com",
+      "reddit.com", "weibo.com", "xiaohongshu.com",
+      "ixigua.com", "youku.com", "iqiyi.com", "ted.com",
+      "dailymotion.com", "sohu.com", "qq.com", "acfun.cn",
+    ];
+    return sites.some(s => host.includes(s));
+  } catch { return false; }
+}
+
+async function probeVideo(url) {
+  try {
+    const res = await fetch(`${DAEMON}/probe?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.has_video === true;
+  } catch { return null; }
+}
