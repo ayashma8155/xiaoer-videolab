@@ -29,9 +29,22 @@ else
 fi
 [[ -n "$PYTHON" ]] || { echo "✗ python3 not found." >&2; exit 1; }
 
-YT_DLP="$(command -v yt-dlp || true)"
+# Pick the yt-dlp binary. Priority: explicit override > nightly build > stable.
+# Nightly is preferred because fast-moving sites (Bilibili) break stable releases
+# with "HTTP Error 412" until the next stable lands — this mirrors the daemon's
+# own _detect_yt_dlp() so install and runtime agree.
+if [[ -n "${VIDEOLAB_YT_DLP:-}" ]]; then
+  YT_DLP="$VIDEOLAB_YT_DLP"
+elif [[ -x "$HOME/.local/bin/yt-dlp-nightly" ]]; then
+  YT_DLP="$HOME/.local/bin/yt-dlp-nightly"
+elif command -v yt-dlp-nightly >/dev/null 2>&1; then
+  YT_DLP="$(command -v yt-dlp-nightly)"
+else
+  YT_DLP="$(command -v yt-dlp || true)"
+fi
 if [[ -z "$YT_DLP" ]]; then
   echo "✗ yt-dlp not found. Install it first:  brew install yt-dlp" >&2
+  echo "  (or grab the nightly build — see the README FAQ on HTTP Error 412)" >&2
   exit 1
 fi
 YT_DLP_DIR="$(dirname "$YT_DLP")"

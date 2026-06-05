@@ -219,6 +219,9 @@ curl -X POST http://127.0.0.1:7788/download \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
 
+# update everything (latest code + newest yt-dlp engine), keeping your settings
+./scripts/update.sh
+
 # uninstall the service
 ./scripts/uninstall.sh
 ```

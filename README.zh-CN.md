@@ -212,6 +212,9 @@ curl -X POST http://127.0.0.1:7788/download \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
 
+# 一键更新（拉最新代码 + 升级 yt-dlp 内核），自动保留你的设置
+./scripts/update.sh
+
 # 卸载服务
 ./scripts/uninstall.sh
 ```

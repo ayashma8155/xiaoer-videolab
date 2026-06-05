@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.0 — 2026-06-05
+
+- **One-command updater: `./scripts/update.sh`.** Pulls the latest code, updates the yt-dlp engine to
+  the newest nightly, and reinstalls the service — **preserving your existing `VIDEOLAB_*` settings**
+  (filename prefix, cookies browser, max height) by reading them back from the installed plist. One
+  command keeps both the code and the download engine at their newest, strongest versions.
+- **Installer prefers the nightly yt-dlp too.** `scripts/install.sh` now resolves the binary as
+  *explicit `VIDEOLAB_YT_DLP` → `yt-dlp-nightly` → stable*, matching the daemon's runtime detection, so
+  a fresh install of a Bilibili-capable setup doesn't silently fall back to a stale stable binary.
+
 ## 1.1.0 — 2026-06-04
 
 - **Bilibili & other fast-moving sites: survive `HTTP Error 412`.** Stable `yt-dlp` releases lag
