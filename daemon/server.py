@@ -13,7 +13,7 @@ Configuration is via environment variables (all optional):
     VIDEOLAB_COOKIES_BROWSER  pull cookies from this browser   (default: "" / off)
                               e.g. "chrome", "brave", "firefox", "edge", "safari"
                               — needed for login-gated / private videos.
-    VIDEOLAB_APP_NAME         name shown in macOS notifications (default: "Xiaoer VideoLab")
+    VIDEOLAB_APP_NAME         name shown in desktop notifications (default: "Xiaoer VideoLab")
 """
 
 import json
@@ -21,10 +21,13 @@ import os
 import shlex
 import shutil
 import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+
+IS_WINDOWS = sys.platform == "win32"
 
 
 def _detect_yt_dlp() -> str:
@@ -38,7 +41,14 @@ def _detect_yt_dlp() -> str:
     found = shutil.which("yt-dlp")
     if found:
         return found
-    for cand in ("/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"):
+    candidates = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp"]
+    if IS_WINDOWS:
+        local = Path(os.environ.get("LOCALAPPDATA", ""))
+        candidates += [
+            str(local / "yt-dlp" / "yt-dlp.exe"),
+            str(local / "Programs" / "yt-dlp" / "yt-dlp.exe"),
+        ]
+    for cand in candidates:
         if Path(cand).is_file():
             return cand
     return "yt-dlp"  # last resort; relies on PATH at exec time
@@ -52,7 +62,10 @@ PREFIX = os.environ.get("VIDEOLAB_PREFIX", "")
 MAX_HEIGHT = int(os.environ.get("VIDEOLAB_MAX_HEIGHT", "1080"))
 COOKIES_BROWSER = os.environ.get("VIDEOLAB_COOKIES_BROWSER", "").strip()
 APP_NAME = os.environ.get("VIDEOLAB_APP_NAME", "Xiaoer VideoLab")
-LOG_FILE = Path.home() / "Library" / "Logs" / "xiaoer-videolab.log"
+if IS_WINDOWS:
+    LOG_FILE = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "xiaoer-videolab" / "xiaoer-videolab.log"
+else:
+    LOG_FILE = Path.home() / "Library" / "Logs" / "xiaoer-videolab.log"
 
 
 def log(msg: str) -> None:
@@ -63,17 +76,32 @@ def log(msg: str) -> None:
 
 
 def notify(title: str, message: str) -> None:
-    """macOS desktop notification. Silently no-ops on non-macOS systems."""
-    if not shutil.which("osascript"):
-        return
-    safe_title = title.replace('"', "'")
-    safe_msg = message.replace('"', "'").replace("\n", " ")
+    """Desktop notification. Supports macOS (osascript) and Windows (toast)."""
+    safe_title = title.replace('"', "'").replace("'", "''")
+    safe_msg = message.replace('"', "'").replace("'", "''").replace("\n", " ")
     try:
-        subprocess.run(
-            ["osascript", "-e",
-             f'display notification "{safe_msg}" with title "{safe_title}"'],
-            check=False, timeout=5,
-        )
+        if IS_WINDOWS:
+            ps_cmd = f"""
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$nodes = $template.GetElementsByTagName('text')
+$nodes.Item(0).AppendChild($template.CreateTextNode('{safe_title}')) | Out-Null
+$nodes.Item(1).AppendChild($template.CreateTextNode('{safe_msg}')) | Out-Null
+$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('Xiaoer VideoLab').Show($toast)
+"""
+            subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                check=False, timeout=10,
+                creationflags=0x08000000,  # CREATE_NO_WINDOW
+            )
+        elif shutil.which("osascript"):
+            subprocess.run(
+                ["osascript", "-e",
+                 f'display notification "{safe_msg}" with title "{safe_title}"'],
+                check=False, timeout=5,
+            )
     except Exception as e:
         log(f"notify failed: {e}")
 
