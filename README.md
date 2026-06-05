@@ -190,7 +190,7 @@ All optional — set them and re-run `./scripts/install.sh` to bake them into th
 |---|---|---|
 | `VIDEOLAB_PORT` | `7788` | daemon port — ⚠️ if you change it, also edit `extension/background.js` (`DAEMON`) **and** `extension/manifest.json` (`host_permissions`) to the same port, or the button can't reach the daemon |
 | `VIDEOLAB_DOWNLOADS` | `~/Downloads` | where files land |
-| `VIDEOLAB_YT_DLP` | auto-detect | path to the `yt-dlp` binary |
+| `VIDEOLAB_YT_DLP` | auto-detect | path to the `yt-dlp` binary (auto-detect prefers a `yt-dlp-nightly` build if one is installed — see FAQ on `HTTP Error 412`) |
 | `VIDEOLAB_PREFIX` | _(none)_ | filename prefix, e.g. `小耳-` |
 | `VIDEOLAB_MAX_HEIGHT` | `1080` | max video height (set `2160` for 4K) |
 | `VIDEOLAB_COOKIES_BROWSER` | _(off)_ | pull cookies from a browser (`chrome`/`brave`/`firefox`/`edge`/`safari`) for **login-gated / private** videos |
@@ -243,6 +243,22 @@ installed so `yt-dlp` can merge them.
 
 **A private / members-only video fails.** Set `VIDEOLAB_COOKIES_BROWSER` to the browser where you're
 logged in, then re-install.
+
+**A site that used to work now fails — Bilibili returns `HTTP Error 412`, or a site throws extractor
+errors.** The site tightened its anti-bot defenses and your `yt-dlp` is older than the fix. Update it
+first (`yt-dlp --update`, or `brew upgrade yt-dlp`). Stable releases can lag days-to-weeks behind
+fast-moving sites like Bilibili — if updating stable isn't enough, install the **nightly** build, which
+VideoLab auto-detects and prefers over stable:
+
+```bash
+# self-contained nightly binary (macOS) — VideoLab picks it up automatically, no config needed
+mkdir -p ~/.local/bin
+curl -L -o ~/.local/bin/yt-dlp-nightly \
+  https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_macos
+chmod +x ~/.local/bin/yt-dlp-nightly
+# update it any time it falls behind again:
+~/.local/bin/yt-dlp-nightly --update-to nightly
+```
 
 **Not on macOS?** The extension is cross-platform; the *installer* is macOS-only. On Linux/Windows just
 run `python3 daemon/server.py` yourself (any process manager works).

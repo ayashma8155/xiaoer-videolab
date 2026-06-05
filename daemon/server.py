@@ -28,6 +28,13 @@ from urllib.parse import urlparse
 
 
 def _detect_yt_dlp() -> str:
+    # Prefer a nightly build when present. Fast-moving sites (notably Bilibili)
+    # roll out anti-bot changes that stable yt-dlp releases lag behind — the
+    # symptom is "HTTP Error 412: Precondition Failed". Nightly ships extractor
+    # fixes within days, so auto-detect it ahead of stable. See the FAQ.
+    nightly = shutil.which("yt-dlp-nightly") or str(Path.home() / ".local" / "bin" / "yt-dlp-nightly")
+    if Path(nightly).is_file():
+        return nightly
     found = shutil.which("yt-dlp")
     if found:
         return found

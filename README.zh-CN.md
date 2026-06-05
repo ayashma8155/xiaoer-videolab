@@ -183,7 +183,7 @@ Next: load the browser extension
 |---|---|---|
 | `VIDEOLAB_PORT` | `7788` | daemon 端口 —— ⚠️ 改了它，必须**同时**改 `extension/background.js`（`DAEMON`）和 `extension/manifest.json`（`host_permissions`）成同一个端口，否则按钮连不上 daemon |
 | `VIDEOLAB_DOWNLOADS` | `~/Downloads` | 下载目录 |
-| `VIDEOLAB_YT_DLP` | 自动探测 | `yt-dlp` 二进制路径 |
+| `VIDEOLAB_YT_DLP` | 自动探测 | `yt-dlp` 二进制路径（自动探测会优先用已安装的 `yt-dlp-nightly`——见常见问题里的 `HTTP Error 412`）|
 | `VIDEOLAB_PREFIX` | _（无）_ | 文件名前缀，比如 `小耳-` |
 | `VIDEOLAB_MAX_HEIGHT` | `1080` | 最大画质高度（要 4K 填 `2160`） |
 | `VIDEOLAB_COOKIES_BROWSER` | _（关）_ | 从某浏览器取 cookie（`chrome`/`brave`/`firefox`/`edge`/`safari`），用于**登录态 / 私域**视频 |
@@ -233,6 +233,20 @@ curl -X POST http://127.0.0.1:7788/download \
 **下下来画质很低 / 只有声音。** 有些站把视频和音频拆开了，装上 `ffmpeg` 让 `yt-dlp` 能合流。
 
 **私有 / 会员视频下不了。** 把 `VIDEOLAB_COOKIES_BROWSER` 设成你登录的那个浏览器，再重装一次。
+
+**以前能下的站突然挂了 —— B 站报 `HTTP Error 412`，或某站报提取器错误。** 站点升级了反爬，而你的
+`yt-dlp` 比修复版旧。先升级（`yt-dlp --update` 或 `brew upgrade yt-dlp`）。stable 版对 B 站这类
+反爬快的站点常滞后几天到几周——升 stable 还不行就装 **nightly** 版，VideoLab 会自动探测并优先用它：
+
+```bash
+# macOS 独立 nightly 二进制 —— VideoLab 自动识别，无需任何配置
+mkdir -p ~/.local/bin
+curl -L -o ~/.local/bin/yt-dlp-nightly \
+  https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_macos
+chmod +x ~/.local/bin/yt-dlp-nightly
+# 以后再滞后了，随时自更新：
+~/.local/bin/yt-dlp-nightly --update-to nightly
+```
 
 **不是 macOS？** 扩展跨平台，只有*安装脚本*是 macOS 专属。Linux/Windows 自己跑
 `python3 daemon/server.py` 即可（任何进程管理器都行）。

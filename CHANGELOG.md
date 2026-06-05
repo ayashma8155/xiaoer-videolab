@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0 — 2026-06-04
+
+- **Bilibili & other fast-moving sites: survive `HTTP Error 412`.** Stable `yt-dlp` releases lag
+  behind sites that tighten anti-bot defenses (Bilibili in particular), causing downloads to fail
+  with `HTTP Error 412: Precondition Failed`. The daemon's yt-dlp auto-detection now **prefers a
+  `yt-dlp-nightly` build** (`yt-dlp-nightly` on `PATH`, or `~/.local/bin/yt-dlp-nightly`) over the
+  stable binary, so installing nightly fixes these sites with zero config.
+- Docs: new FAQ entry on `HTTP Error 412` / sites that stop working, with a one-liner to install and
+  self-update the nightly binary.
+
 ## 1.0.1 — 2026-06-04
 
 - **Security:** `/download` now rejects requests with an `http(s)` `Origin` header, blocking
