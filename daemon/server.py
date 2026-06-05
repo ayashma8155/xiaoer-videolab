@@ -27,6 +27,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+from typing import Optional
 
 
 def _detect_yt_dlp() -> str:
@@ -82,6 +83,11 @@ def notify(title: str, message: str) -> None:
         log(f"notify failed: {e}")
 
 
+# Track active download processes so they can be cancelled.
+_active_downloads: dict[str, subprocess.Popen] = {}
+_active_downloads_lock = threading.Lock()
+
+
 def _simple_hash(url: str) -> str:
     """Short deterministic hash for a URL (used as history entry id)."""
     h = 0
@@ -97,6 +103,17 @@ def _append_history(entry: dict) -> None:
         HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
         with HISTORY_FILE.open("a") as f:
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def cancel_download(url: str) -> bool:
+    """Kill a running download process by URL. Returns True if a process was killed."""
+    with _active_downloads_lock:
+        proc = _active_downloads.get(url)
+        if proc and proc.poll() is None:
+            proc.kill()
+            log(f"[cancelled] {url}")
+            return True
+    return False
 
 
 def download(url: str) -> None:
@@ -126,7 +143,15 @@ def download(url: str) -> None:
 
     log("$ " + " ".join(shlex.quote(c) for c in cmd))
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        with _active_downloads_lock:
+            _active_downloads[url] = proc
+        try:
+            stdout, stderr = proc.communicate(timeout=3600)
+            result = subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+        finally:
+            with _active_downloads_lock:
+                _active_downloads.pop(url, None)
         tail = (result.stdout + result.stderr).strip().splitlines()
         timestamp = datetime.datetime.now().isoformat()
 
@@ -141,7 +166,7 @@ def download(url: str) -> None:
                     return parts[-2] if len(parts) >= 2 else ""
             return ""
 
-        def _parse_filesize() -> int | None:
+        def _parse_filesize() -> Optional[int]:
             for line in tail:
                 if "[download]" in line and "% of" in line and "in" in line:
                     m = re.search(r"(\d+\.?\d*)\s*(KiB|MiB|GiB)", line)
@@ -229,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
-    def _handle_open_or_reveal(self, cmd: str, flag: str | None = None) -> None:
+    def _handle_open_or_reveal(self, cmd: str, flag: Optional[str] = None) -> None:
         """Open a file with macOS `open`, optionally with a flag like `-R`."""
         origin = self.headers.get("Origin", "")
         if origin.startswith(("http://", "https://")):
@@ -243,7 +268,7 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(raw)
             filepath = data.get("path", "")
             if not filepath or not Path(filepath).is_file():
-                raise ValueError(f"file not found: {filepath}")
+                raise ValueError(f"file not found")
         except Exception as e:
             self.send_response(400)
             self._cors()
@@ -346,6 +371,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/reveal":
             self._handle_open_or_reveal("open", flag="-R")
             return
+        if path == "/cancel":
+            self._handle_cancel()
+            return
         if path != "/download":
             self.send_response(404)
             self._cors()
@@ -385,6 +413,36 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(b'{"queued":true}')
+
+    def _handle_cancel(self) -> None:
+        """Cancel a running download by URL."""
+        origin = self.headers.get("Origin", "")
+        if origin.startswith(("http://", "https://")):
+            self.send_response(403)
+            self._cors()
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length).decode("utf-8", "replace")
+        try:
+            data = json.loads(raw)
+            url = data["url"]
+        except Exception as e:
+            self.send_response(400)
+            self._cors()
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(f"bad request: {e}".encode())
+            return
+
+        killed = cancel_download(url)
+        body = json.dumps({"cancelled": killed}, ensure_ascii=False).encode("utf-8")
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, fmt, *args) -> None:
         log("http: " + (fmt % args))

@@ -21,6 +21,8 @@ const LOCALES = {
     sent: "Download request sent", started: "Daemon started",
     startFailed: "Start failed: {msg}", notInstalled: "Run install.sh first",
     daemonError: "Daemon returned {code}", daemonOfflineMsg: "Cannot reach daemon",
+    fileNotFound: "File no longer exists on disk",
+    cancel: "Remove",
     justNow: "just now", minAgo: "{n} min ago", hrAgo: "{n} hr ago", dayAgo: "{n} day ago",
     today: "Today", yesterday: "Yesterday", earlier: "Earlier",
   },
@@ -36,6 +38,8 @@ const LOCALES = {
     sent: "下载请求已发送", started: "Daemon 已启动",
     startFailed: "启动失败: {msg}", notInstalled: "需要先运行 install.sh",
     daemonError: "服务返回 {code}", daemonOfflineMsg: "无法连接到 daemon",
+    fileNotFound: "文件已不存在于磁盘",
+    cancel: "移除",
     justNow: "刚刚", minAgo: "{n} 分钟前", hrAgo: "{n} 小时前", dayAgo: "{n} 天前",
     today: "今天", yesterday: "昨天", earlier: "更早",
   },
@@ -68,6 +72,7 @@ const ICONS = {
   reveal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
   redownload: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+  cancel: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
 };
 
 let currentTabUrl = "";
@@ -165,8 +170,16 @@ async function loadHistory() {
 
   const seen = new Set();
   const combined = [];
+
+  // 1. Active pending (in-progress downloads) — highest priority
   for (const p of activePending) { combined.push(p); seen.add(p.url); }
+  // 2. Daemon entries (completed downloads from server)
   for (const d of daemonEntries) { if (!seen.has(d.url)) { combined.push(d); seen.add(d.url); } }
+  // 3. Cache fallback — keeps completed items visible even if daemon
+  //    temporarily returns empty data mid-download (prevents list shrinkage)
+  if (cached) {
+    for (const c of cached) { if (!seen.has(c.url)) { combined.push(c); seen.add(c.url); } }
+  }
 
   if (combined.length === 0) {
     if (!cached || cached.length === 0) {
@@ -259,6 +272,8 @@ function createItem(item) {
     addAction(actionsDiv, ICONS.redownload, t("redownload"), () => startDownload(item.url, item.title));
   } else if (item.status === "failed") {
     addAction(actionsDiv, ICONS.retry, t("retry"), () => startDownload(item.url, item.title));
+  } else if (item.status === "queued" || item.status === "downloading") {
+    addAction(actionsDiv, ICONS.cancel, t("cancel"), () => removePending(item.url));
   }
   return el;
 }
@@ -379,14 +394,37 @@ function stopPolling() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
 
+/** Remove a pending download from storage, cancel on daemon, and refresh. */
+async function removePending(url) {
+  // Tell the daemon to kill the yt-dlp process for this URL (fire & forget)
+  sendToDaemon("POST", "/cancel", { url });
+  // Remove from local pending list
+  const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
+  const filtered = pending.filter(p => p.url !== url);
+  if (filtered.length === pending.length) return;
+  await chrome.storage.local.set({ [STORAGE_KEY]: filtered });
+  await loadHistory();
+}
+
 // ── helpers ───────────────────────────────────────────
 
 async function sendToDaemon(method, path, body) {
   try {
-    await fetch(`${DAEMON}${path}`, {
+    const res = await fetch(`${DAEMON}${path}`, {
       method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
-  } catch { /* silent */ }
+    if (!res.ok) {
+      const txt = await res.text();
+      if (path === "/open" || path === "/reveal") {
+        const isNotFound = txt.includes("file not found");
+        showMsg(isNotFound ? t("fileNotFound") : txt, "error");
+      } else {
+        showMsg(txt.length < 80 ? txt : t("daemonError", { code: res.status }), "error");
+      }
+    }
+  } catch {
+    showMsg(t("daemonOfflineMsg"), "error");
+  }
 }
 
 function showMsg(text, type) {
