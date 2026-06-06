@@ -392,12 +392,16 @@ async function grabDouyinStream() {
 // Injected into a Xiaohongshu note. The <video> src is a blob: (MSE), so the real
 // CDN url isn't on the element — it lives in window.__INITIAL_STATE__. Self-contained.
 async function grabXhsStream() {
+  // noteDetailMap accumulates EVERY note visited this SPA session, so iterating it
+  // returns the FIRST video viewed, not the current one. Match the URL's note id.
+  const noteId = (location.pathname.match(/\/(?:explore|discovery\/item)\/([0-9a-fA-F]+)/) || [])[1] || "";
   const findOnce = () => {
     try {
       const st = window.__INITIAL_STATE__;
       const nd = st && st.note && st.note.noteDetailMap;
       if (nd) {
-        for (const id in nd) {
+        const ids = (noteId && nd[noteId]) ? [noteId] : Object.keys(nd);
+        for (const id of ids) {
           const note = nd[id] && nd[id].note;
           const stream = note && note.video && note.video.media && note.video.media.stream;
           if (stream) {
