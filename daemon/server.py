@@ -488,6 +488,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/cancel":
             self._handle_cancel()
             return
+        if path == "/history-delete":
+            self._handle_history_delete()
+            return
         if path == "/download-direct":
             self._handle_download_direct()
             return
@@ -578,6 +581,46 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         self.wfile.write(b'{"queued":true}')
+
+    def _handle_history_delete(self) -> None:
+        """Remove entries from the history file. Payload: {url} to drop one, or
+        {clear:"all"} / {clear:"failed"} to bulk-clear. Lets the popup declutter."""
+        origin = self.headers.get("Origin", "")
+        if origin.startswith(("http://", "https://")):
+            self.send_response(403)
+            self._cors()
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length).decode("utf-8", "replace")
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {}
+        url = data.get("url", "")
+        clear = data.get("clear", "")
+        with _history_lock:
+            if HISTORY_FILE.is_file():
+                lines = HISTORY_FILE.read_text().strip().splitlines()
+                kept = []
+                for line in lines:
+                    try:
+                        e = json.loads(line)
+                    except Exception:
+                        continue
+                    if clear == "all":
+                        continue
+                    if clear == "failed" and e.get("status") == "failed":
+                        continue
+                    if url and e.get("url") == url:
+                        continue
+                    kept.append(line)
+                HISTORY_FILE.write_text(("\n".join(kept) + "\n") if kept else "")
+        self.send_response(200)
+        self._cors()
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"ok":true}')
 
     def _handle_cancel(self) -> None:
         """Cancel a running download by URL."""

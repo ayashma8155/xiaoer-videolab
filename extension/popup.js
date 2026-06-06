@@ -24,7 +24,7 @@ const LOCALES = {
     douyinGrabbing: "Reading the playing video...",
     douyinPlayFirst: "Couldn't read the video — wait for it to load, then retry",
     fileNotFound: "File no longer exists on disk",
-    cancel: "Remove",
+    cancel: "Remove", remove: "Remove from list", clearAll: "Clear", clearConfirm: "Clear all records?",
     justNow: "just now", minAgo: "{n} min ago", hrAgo: "{n} hr ago", dayAgo: "{n} day ago",
     today: "Today", yesterday: "Yesterday", earlier: "Earlier",
   },
@@ -43,7 +43,7 @@ const LOCALES = {
     douyinGrabbing: "正在读取正在播放的视频...",
     douyinPlayFirst: "没读到视频(可能还在加载)，稍等一两秒再点一次",
     fileNotFound: "文件已不存在于磁盘",
-    cancel: "移除",
+    cancel: "移除", remove: "从列表移除", clearAll: "清空", clearConfirm: "清空全部记录？",
     justNow: "刚刚", minAgo: "{n} 分钟前", hrAgo: "{n} 小时前", dayAgo: "{n} 天前",
     today: "今天", yesterday: "昨天", earlier: "更早",
   },
@@ -123,6 +123,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const startBtn = document.getElementById("startDaemonBtn");
   if (startBtn) startBtn.addEventListener("click", onStartDaemon);
 
+  const clearBtn = document.getElementById("clearAllBtn");
+  if (clearBtn) clearBtn.addEventListener("click", clearAllHistory);
+
   // Locale toggle
   document.getElementById("localeToggle").addEventListener("click", () => {
     setLocale(_locale === "en" ? "zh" : "en");
@@ -137,6 +140,8 @@ window.addEventListener("beforeunload", stopPolling);
 
 async function loadHistory() {
   hide("daemonOffline");
+  const _clearBtn = document.getElementById("clearAllBtn");
+  if (_clearBtn) _clearBtn.hidden = true; // renderHistory re-shows it when there are items
 
   const { [CACHE_KEY]: cached } = await chrome.storage.local.get(CACHE_KEY);
   const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
@@ -206,6 +211,8 @@ async function loadHistory() {
 function renderHistory(entries) {
   hide("emptyState");
   hide("daemonOffline");
+  const clearBtn = document.getElementById("clearAllBtn");
+  if (clearBtn) clearBtn.hidden = !(entries && entries.length);
   const container = document.getElementById("historyList");
   container.innerHTML = "";
 
@@ -270,16 +277,52 @@ function createItem(item) {
   `;
 
   const actionsDiv = el.querySelector(".item-actions");
-  if (item.status === "done" && item.filepath) {
-    addAction(actionsDiv, ICONS.play, t("play"), () => sendToDaemon("POST", "/open", { path: item.filepath }));
-    addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => sendToDaemon("POST", "/reveal", { path: item.filepath }));
+  if (item.status === "done") {
+    if (item.filepath) {
+      addAction(actionsDiv, ICONS.play, t("play"), () => sendToDaemon("POST", "/open", { path: item.filepath }));
+      addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => sendToDaemon("POST", "/reveal", { path: item.filepath }));
+    }
     addAction(actionsDiv, ICONS.redownload, t("redownload"), () => startDownload(item.url, item.title));
+    addAction(actionsDiv, ICONS.cancel, t("remove"), () => removeItem(item));
   } else if (item.status === "failed") {
     addAction(actionsDiv, ICONS.retry, t("retry"), () => startDownload(item.url, item.title));
+    addAction(actionsDiv, ICONS.cancel, t("remove"), () => removeItem(item));
   } else if (item.status === "queued" || item.status === "downloading") {
     addAction(actionsDiv, ICONS.cancel, t("cancel"), () => removePending(item.url));
   }
   return el;
+}
+
+// Remove a single entry from the list: drop it from the daemon's history file AND
+// from local pending/cache, then re-render. Lets Jane declutter (esp. failed ones).
+async function removeItem(item) {
+  try {
+    await fetch(`${DAEMON}/history-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: item.url }),
+    });
+  } catch (e) {}
+  for (const key of [STORAGE_KEY, CACHE_KEY]) {
+    const { [key]: arr = [] } = await chrome.storage.local.get(key);
+    if (Array.isArray(arr)) {
+      await chrome.storage.local.set({ [key]: arr.filter((e) => e.url !== item.url) });
+    }
+  }
+  await loadHistory();
+}
+
+// Clear the whole list (keeps nothing). Wipes daemon history + local pending/cache.
+async function clearAllHistory() {
+  try {
+    await fetch(`${DAEMON}/history-delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clear: "all" }),
+    });
+  } catch (e) {}
+  await chrome.storage.local.set({ [STORAGE_KEY]: [], [CACHE_KEY]: [] });
+  await loadHistory();
 }
 
 function addAction(parent, svg, tooltip, handler) {
