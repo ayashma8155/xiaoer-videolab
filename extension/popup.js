@@ -320,68 +320,71 @@ function directSiteFor(url) {
 }
 
 // Injected into a Douyin tab (MAIN world). a_bogus blocks yt-dlp entirely, so we read
-// the real stream off the page. Two cases:
-//   • standalone /video/<id> page → progressive URL is the <video>'s currentSrc
-//   • 精选/feed page → videos are MSE blobs (no URL on the element, several preloaded).
-//     We find the React root anywhere in the DOM, walk the fiber tree, and pull the
-//     playAddr of the aweme whose id matches modal_id — so we get THIS video, not one
-//     of the ~40 preloaded ones. Crucially this does NOT depend on the video playing.
+// the real stream off the page. We collect candidate URLs from two sources and prefer
+// a session-free (unsigned) one — because the URL the <video> is actively playing is
+// often a douyinvod link signed with tk=webid/signature, which 403s from the daemon's
+// cookieless curl. The aweme's playAddr (matched by modal_id) is usually a clean
+// zjcdn URL that bare curl can fetch. This does NOT depend on the video playing.
 function grabDouyinStream() {
-  const pickSrc = () => {
-    for (const v of document.querySelectorAll("video")) {
-      const s = v.currentSrc || v.src || "";
-      if (/zjcdn|douyinvod|\/video\/tos\//.test(s)) return s;
-    }
-    return "";
-  };
-  let url = pickSrc();
+  // A URL bound to the browser session — the daemon's curl can't fetch it (403).
+  const isSigned = (u) => /tk=webid|[?&]signature=|[?&]policy=/.test(u || "");
+  const candidates = [];
   let title = "";
 
-  if (!url) {
-    const modalId =
-      (location.href.match(/modal_id=(\d+)/) || location.href.match(/\/video\/(\d+)/) || [])[1] || "";
-    // Find any React fiber root in the page.
-    let root = null;
-    const els = document.querySelectorAll("body *");
-    for (let i = 0; i < els.length; i++) {
-      const k = Object.keys(els[i]).find(
-        (x) => x.startsWith("__reactContainer$") || x.startsWith("__reactFiber$")
-      );
-      if (k) { root = els[i][k]; break; }
-    }
-    if (root && modalId) {
-      let hit = "", hitTitle = "", scanned = 0;
-      const dig = (o, d) => {
-        if (hit || !o || typeof o !== "object" || d > 3) return;
-        try {
-          if ((String(o.awemeId) === modalId || String(o.aweme_id) === modalId) && o.video) {
-            const pa =
-              o.video.playAddr || o.video.play_addr ||
-              (o.video.bitRateList && o.video.bitRateList[0] && o.video.bitRateList[0].playAddr);
-            if (pa) {
-              const u = Array.isArray(pa) ? (pa[0].src || pa[0].url) : (pa.urlList && pa.urlList[0]);
-              if (u) { hit = u; hitTitle = (o.desc || "").slice(0, 80); }
-            }
-          }
-        } catch (e) {}
-        for (const k in o) {
-          try { if (o[k] && typeof o[k] === "object") dig(o[k], d + 1); } catch (e) {}
+  // Source 1 (preferred): the aweme whose id === modal_id, from the React tree. Find a
+  // React root anywhere in the DOM, walk the fiber tree, collect its playAddr URLs.
+  const modalId =
+    (location.href.match(/modal_id=(\d+)/) || location.href.match(/\/video\/(\d+)/) || [])[1] || "";
+  let root = null;
+  const els = document.querySelectorAll("body *");
+  for (let i = 0; i < els.length; i++) {
+    const k = Object.keys(els[i]).find(
+      (x) => x.startsWith("__reactContainer$") || x.startsWith("__reactFiber$")
+    );
+    if (k) { root = els[i][k]; break; }
+  }
+  if (root && modalId) {
+    let done = false, scanned = 0;
+    const pushList = (pa) => {
+      if (!pa) return;
+      if (Array.isArray(pa)) { for (const e of pa) { const u = e && (e.src || e.url); if (u) candidates.push(u); } }
+      else if (pa.urlList) { for (const u of pa.urlList) if (u) candidates.push(u); }
+    };
+    const dig = (o, d) => {
+      if (done || !o || typeof o !== "object" || d > 3) return;
+      try {
+        if ((String(o.awemeId) === modalId || String(o.aweme_id) === modalId) && o.video) {
+          const v = o.video;
+          pushList(v.playAddr); pushList(v.play_addr);
+          if (v.bitRateList) for (const b of v.bitRateList) pushList(b.playAddr);
+          title = (o.desc || "").slice(0, 80);
+          done = true;
+          return;
         }
-      };
-      // Iterative fiber walk (avoids deep recursion / stack overflow).
-      const stack = [[root, 0]];
-      while (stack.length && !hit && scanned < 80000) {
-        const [node, depth] = stack.pop();
-        if (!node || depth > 200) continue;
-        scanned++;
-        if (node.memoizedProps) dig(node.memoizedProps, 0);
-        if (node.child) stack.push([node.child, depth + 1]);
-        if (node.sibling) stack.push([node.sibling, depth]);
+      } catch (e) {}
+      for (const k in o) {
+        try { if (o[k] && typeof o[k] === "object") dig(o[k], d + 1); } catch (e) {}
       }
-      if (hit) { url = hit; title = hitTitle; }
+    };
+    const stack = [[root, 0]];
+    while (stack.length && !done && scanned < 80000) {
+      const [node, depth] = stack.pop();
+      if (!node || depth > 200) continue;
+      scanned++;
+      if (node.memoizedProps) dig(node.memoizedProps, 0);
+      if (node.child) stack.push([node.child, depth + 1]);
+      if (node.sibling) stack.push([node.sibling, depth]);
     }
   }
 
+  // Source 2 (fallback): URLs already on <video> elements (standalone /video/ pages).
+  for (const v of document.querySelectorAll("video")) {
+    const s = v.currentSrc || v.src || "";
+    if (/zjcdn|douyinvod|\/video\/tos\//.test(s)) candidates.push(s);
+  }
+
+  // Prefer an unsigned URL; only fall back to a signed one if that's all we have.
+  const url = candidates.find((u) => !isSigned(u)) || candidates[0] || "";
   if (!title) title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
   return { url, title };
 }
