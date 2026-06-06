@@ -10,7 +10,7 @@ Powered by a tiny local [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) daemon — 
 
 [![CI](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml/badge.svg)](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
+![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 ![Manifest V3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)
 ![Python stdlib only](https://img.shields.io/badge/Python-stdlib%20only-3776AB?logo=python&logoColor=white)
 ![No tracking](https://img.shields.io/badge/network-localhost%20only-27ae60)
@@ -19,6 +19,21 @@ Powered by a tiny local [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) daemon — 
 [![简体中文](https://img.shields.io/badge/lang-简体中文-lightgrey)](README.zh-CN.md)
 
 </div>
+
+---
+
+## 🙏 Thanks to our contributors / 致谢贡献者
+
+**This project is better because of these people — thank you! / 本项目因他们而更好,衷心感谢!**
+
+- [**@ttmouse**](https://github.com/ttmouse) — popup history panel, **cancel a stuck download**, play / open-folder, one-click daemon start ([#4](https://github.com/Jane-xiaoer/xiaoer-videolab/pull/4))
+  <br>弹出历史面板、**取消卡住的下载**、播放 / 打开文件夹、一键启动服务
+- [**@jzq1212 (林以恒)**](https://github.com/jzq1212) — **Windows support**: cross-platform daemon + PowerShell install scripts ([#1](https://github.com/Jane-xiaoer/xiaoer-videolab/pull/1))
+  <br>**Windows 支持**:跨平台 daemon + PowerShell 安装脚本
+- [**@alick-zhang**](https://github.com/alick-zhang) — raised the Windows request that kicked it off ([#3](https://github.com/Jane-xiaoer/xiaoer-videolab/issues/3))
+  <br>提出 Windows 需求,促成了上面的 Windows 支持
+
+> Issues & PRs welcome — your name goes here too. / 欢迎提 issue 和 PR,你的名字也会出现在这里。
 
 ---
 

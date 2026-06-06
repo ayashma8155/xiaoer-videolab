@@ -10,7 +10,7 @@
 
 [![CI](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml/badge.svg)](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
-![Platform](https://img.shields.io/badge/平台-macOS-lightgrey)
+![Platform](https://img.shields.io/badge/平台-macOS%20%7C%20Windows-lightgrey)
 ![Manifest V3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)
 ![Python stdlib only](https://img.shields.io/badge/Python-仅标准库-3776AB?logo=python&logoColor=white)
 ![localhost only](https://img.shields.io/badge/网络-仅本机-27ae60)
@@ -19,6 +19,18 @@
 [![简体中文](https://img.shields.io/badge/lang-简体中文-2563eb)](README.zh-CN.md)
 
 </div>
+
+---
+
+## 🙏 致谢贡献者
+
+**本项目因为他们而更好,衷心感谢!**
+
+- [**@ttmouse**](https://github.com/ttmouse) —— 弹出历史面板、**取消卡住的下载**、播放 / 打开文件夹、一键启动服务（[#4](https://github.com/Jane-xiaoer/xiaoer-videolab/pull/4)）
+- [**@jzq1212（林以恒）**](https://github.com/jzq1212) —— **Windows 支持**:跨平台 daemon + PowerShell 安装脚本（[#1](https://github.com/Jane-xiaoer/xiaoer-videolab/pull/1)）
+- [**@alick-zhang**](https://github.com/alick-zhang) —— 提出 Windows 需求,促成了上面的 Windows 支持（[#3](https://github.com/Jane-xiaoer/xiaoer-videolab/issues/3)）
+
+> 欢迎提 issue 和 PR,你的名字也会出现在这里。
 
 ---
 
