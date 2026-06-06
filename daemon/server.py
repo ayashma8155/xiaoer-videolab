@@ -299,7 +299,9 @@ def download_direct(direct_url: str, referer: str, filename: str, page_url: str)
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
     out = DOWNLOADS / (f"{PREFIX}{filename}" if PREFIX else filename)
     cmd = [
-        "curl", "-fL", "--retry", "2",
+        # --noproxy '*' : these are domestic CDNs (xhscdn is plain http, zjcdn etc).
+        # Without it the request goes through the system proxy (Clash) and hangs.
+        "curl", "-fL", "--retry", "2", "--noproxy", "*",
         "-H", f"Referer: {referer}",
         "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
