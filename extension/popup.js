@@ -22,7 +22,7 @@ const LOCALES = {
     startFailed: "Start failed: {msg}", notInstalled: "Run install.sh first",
     daemonError: "Daemon returned {code}", daemonOfflineMsg: "Cannot reach daemon",
     douyinGrabbing: "Reading the playing video...",
-    douyinPlayFirst: "Couldn't read the video — refresh the page and try again",
+    douyinPlayFirst: "Couldn't read the video — wait for it to load, then retry",
     fileNotFound: "File no longer exists on disk",
     cancel: "Remove",
     justNow: "just now", minAgo: "{n} min ago", hrAgo: "{n} hr ago", dayAgo: "{n} day ago",
@@ -41,7 +41,7 @@ const LOCALES = {
     startFailed: "启动失败: {msg}", notInstalled: "需要先运行 install.sh",
     daemonError: "服务返回 {code}", daemonOfflineMsg: "无法连接到 daemon",
     douyinGrabbing: "正在读取正在播放的视频...",
-    douyinPlayFirst: "没读取到视频，请刷新页面后重试",
+    douyinPlayFirst: "没读到视频(可能还在加载)，稍等一两秒再点一次",
     fileNotFound: "文件已不存在于磁盘",
     cancel: "移除",
     justNow: "刚刚", minAgo: "{n} 分钟前", hrAgo: "{n} 小时前", dayAgo: "{n} 天前",
@@ -270,14 +270,7 @@ function createItem(item) {
   `;
 
   const actionsDiv = el.querySelector(".item-actions");
-  if (item.status === "done" && item.localDownload) {
-    // File was downloaded by Chrome itself — open/reveal via the downloads API.
-    if (item.downloadId != null) {
-      addAction(actionsDiv, ICONS.play, t("play"), () => chrome.downloads.open(item.downloadId));
-      addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => chrome.downloads.show(item.downloadId));
-    }
-    addAction(actionsDiv, ICONS.redownload, t("redownload"), () => onDownload());
-  } else if (item.status === "done" && item.filepath) {
+  if (item.status === "done" && item.filepath) {
     addAction(actionsDiv, ICONS.play, t("play"), () => sendToDaemon("POST", "/open", { path: item.filepath }));
     addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => sendToDaemon("POST", "/reveal", { path: item.filepath }));
     addAction(actionsDiv, ICONS.redownload, t("redownload"), () => startDownload(item.url, item.title));
@@ -326,100 +319,108 @@ function directSiteFor(url) {
   return DIRECT_SITES.find((s) => s.host.test(host)) || null;
 }
 
-// Injected into a Douyin tab (MAIN world). a_bogus blocks yt-dlp entirely, so we read
-// the real stream off the page. We collect candidate URLs from two sources and prefer
-// a session-free (unsigned) one — because the URL the <video> is actively playing is
-// often a douyinvod link signed with tk=webid/signature, which 403s from the daemon's
-// cookieless curl. The aweme's playAddr (matched by modal_id) is usually a clean
-// zjcdn URL that bare curl can fetch. This does NOT depend on the video playing.
-function grabDouyinStream() {
-  // A URL bound to the browser session — the daemon's curl can't fetch it (403).
+// Injected into a Douyin tab (MAIN world). a_bogus blocks yt-dlp, so we read the real
+// stream off the page. We ONLY return a session-free (unsigned) URL: clean zjcdn links
+// download with the daemon's cookieless curl, whereas the link the <video> is actively
+// playing is often a douyinvod link signed with tk=webid (bound to your login session)
+// that 403s the daemon. The clean URLs live in the aweme's playAddr/bitRateList in the
+// React tree, matched by modal_id so we get THIS video — and they exist even when logged
+// in. The catch is the SPA hydrates that data asynchronously, so we retry until it's there.
+async function grabDouyinStream() {
   const isSigned = (u) => /tk=webid|[?&]signature=|[?&]policy=/.test(u || "");
-  const candidates = [];
-  let title = "";
-
-  // Source 1 (preferred): the aweme whose id === modal_id, from the React tree. Find a
-  // React root anywhere in the DOM, walk the fiber tree, collect its playAddr URLs.
   const modalId =
     (location.href.match(/modal_id=(\d+)/) || location.href.match(/\/video\/(\d+)/) || [])[1] || "";
-  let root = null;
-  const els = document.querySelectorAll("body *");
-  for (let i = 0; i < els.length; i++) {
-    const k = Object.keys(els[i]).find(
-      (x) => x.startsWith("__reactContainer$") || x.startsWith("__reactFiber$")
-    );
-    if (k) { root = els[i][k]; break; }
-  }
-  if (root && modalId) {
-    let done = false, scanned = 0;
-    const pushList = (pa) => {
-      if (!pa) return;
-      if (Array.isArray(pa)) { for (const e of pa) { const u = e && (e.src || e.url); if (u) candidates.push(u); } }
-      else if (pa.urlList) { for (const u of pa.urlList) if (u) candidates.push(u); }
-    };
-    const dig = (o, d) => {
-      if (done || !o || typeof o !== "object" || d > 3) return;
-      try {
-        if ((String(o.awemeId) === modalId || String(o.aweme_id) === modalId) && o.video) {
-          const v = o.video;
-          pushList(v.playAddr); pushList(v.play_addr);
-          if (v.bitRateList) for (const b of v.bitRateList) pushList(b.playAddr);
-          title = (o.desc || "").slice(0, 80);
-          done = true;
-          return;
-        }
-      } catch (e) {}
-      for (const k in o) {
-        try { if (o[k] && typeof o[k] === "object") dig(o[k], d + 1); } catch (e) {}
-      }
-    };
-    const stack = [[root, 0]];
-    while (stack.length && !done && scanned < 80000) {
-      const [node, depth] = stack.pop();
-      if (!node || depth > 200) continue;
-      scanned++;
-      if (node.memoizedProps) dig(node.memoizedProps, 0);
-      if (node.child) stack.push([node.child, depth + 1]);
-      if (node.sibling) stack.push([node.sibling, depth]);
+
+  const findOnce = () => {
+    const candidates = [];
+    let title = "";
+    let root = null;
+    const els = document.querySelectorAll("body *");
+    for (let i = 0; i < els.length; i++) {
+      const k = Object.keys(els[i]).find(
+        (x) => x.startsWith("__reactContainer$") || x.startsWith("__reactFiber$")
+      );
+      if (k) { root = els[i][k]; break; }
     }
-  }
+    if (root && modalId) {
+      let done = false, scanned = 0;
+      const pushList = (pa) => {
+        if (!pa) return;
+        if (Array.isArray(pa)) { for (const e of pa) { const u = e && (e.src || e.url); if (u) candidates.push(u); } }
+        else if (pa.urlList) { for (const u of pa.urlList) if (u) candidates.push(u); }
+      };
+      const dig = (o, d) => {
+        if (done || !o || typeof o !== "object" || d > 3) return;
+        try {
+          if ((String(o.awemeId) === modalId || String(o.aweme_id) === modalId) && o.video) {
+            const v = o.video;
+            pushList(v.playAddr); pushList(v.play_addr);
+            if (v.bitRateList) for (const b of v.bitRateList) pushList(b.playAddr);
+            title = (o.desc || "").slice(0, 80);
+            done = true;
+            return;
+          }
+        } catch (e) {}
+        for (const k in o) {
+          try { if (o[k] && typeof o[k] === "object") dig(o[k], d + 1); } catch (e) {}
+        }
+      };
+      const stack = [[root, 0]];
+      while (stack.length && !done && scanned < 80000) {
+        const [node, depth] = stack.pop();
+        if (!node || depth > 200) continue;
+        scanned++;
+        if (node.memoizedProps) dig(node.memoizedProps, 0);
+        if (node.child) stack.push([node.child, depth + 1]);
+        if (node.sibling) stack.push([node.sibling, depth]);
+      }
+    }
+    return { clean: candidates.find((u) => !isSigned(u)) || "", title };
+  };
 
-  // Source 2 (fallback): URLs already on <video> elements (standalone /video/ pages).
-  for (const v of document.querySelectorAll("video")) {
-    const s = v.currentSrc || v.src || "";
-    if (/zjcdn|douyinvod|\/video\/tos\//.test(s)) candidates.push(s);
+  // Retry ~6s: the React data may not be hydrated yet the instant the user clicks.
+  // THIS is what fixes the flaky "no url / signed-url 403 / please-play" failures.
+  let r = findOnce();
+  for (let i = 0; i < 12 && !r.clean; i++) {
+    await new Promise((res) => setTimeout(res, 500));
+    r = findOnce();
   }
-
-  // Prefer an unsigned URL; only fall back to a signed one if that's all we have.
-  const url = candidates.find((u) => !isSigned(u)) || candidates[0] || "";
-  if (!title) title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
-  const nClean = candidates.filter((u) => !isSigned(u)).length;
-  return { url, title, debug: { nTotal: candidates.length, nClean, pickedSigned: isSigned(url) } };
+  const title = r.title || (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
+  return { url: r.clean, title };
 }
 
 // Injected into a Xiaohongshu note. The <video> src is a blob: (MSE), so the real
 // CDN url isn't on the element — it lives in window.__INITIAL_STATE__. Self-contained.
 async function grabXhsStream() {
-  try {
-    const st = window.__INITIAL_STATE__;
-    const nd = st && st.note && st.note.noteDetailMap;
-    if (nd) {
-      for (const id in nd) {
-        const note = nd[id] && nd[id].note;
-        const stream = note && note.video && note.video.media && note.video.media.stream;
-        if (stream) {
-          for (const codec of ["h264", "h265", "av1", "h266"]) {
-            const arr = stream[codec];
-            if (arr && arr[0] && arr[0].masterUrl) {
-              const title = (note.title || note.desc || "").replace(/[\r\n]+/g, " ").slice(0, 80).trim();
-              return { url: arr[0].masterUrl, title };
+  const findOnce = () => {
+    try {
+      const st = window.__INITIAL_STATE__;
+      const nd = st && st.note && st.note.noteDetailMap;
+      if (nd) {
+        for (const id in nd) {
+          const note = nd[id] && nd[id].note;
+          const stream = note && note.video && note.video.media && note.video.media.stream;
+          if (stream) {
+            for (const codec of ["h264", "h265", "av1", "h266"]) {
+              const arr = stream[codec];
+              if (arr && arr[0] && arr[0].masterUrl) {
+                const title = (note.title || note.desc || "").replace(/[\r\n]+/g, " ").slice(0, 80).trim();
+                return { url: arr[0].masterUrl, title };
+              }
             }
           }
         }
       }
-    }
-  } catch (e) {}
-  return { url: "", title: "" };
+    } catch (e) {}
+    return { url: "", title: "" };
+  };
+  // Retry ~6s — __INITIAL_STATE__ may not be populated yet right when clicked.
+  let r = findOnce();
+  for (let i = 0; i < 12 && !r.url; i++) {
+    await new Promise((res) => setTimeout(res, 500));
+    r = findOnce();
+  }
+  return r;
 }
 
 async function startDirectDownload(site) {
@@ -453,36 +454,31 @@ async function startDirectDownload(site) {
       (currentTabUrl.match(/(?:video|explore|item)\/(\w+)/) ||
        currentTabUrl.match(/modal_id=(\w+)/) || [])[1] || "";
     const title = grabbed.title || currentTabTitle || (idFromUrl ? `${site.name}_${idFromUrl}` : site.name);
-    const safeName = `${title}.mp4`.replace(/[\/\\:*?"<>|]+/g, "_").replace(/^\.+/, "").slice(0, 180);
 
-    // Diagnostic beacon: the daemon's access log captures this GET (path + query), so we
-    // can see what the grab found in *this* browser (clean vs signed candidates) without
-    // needing to inspect Chrome directly. Fire-and-forget; ignore failures.
-    try {
-      const dbg = grabbed.debug || {};
-      const host = (grabbed.url.match(/^https?:\/\/([^/]+)/) || [])[1] || "";
-      fetch(`${DAEMON}/debug?grab=${encodeURIComponent(JSON.stringify({ ...dbg, host }))}`).catch(() => {});
-    } catch (e) {}
-
-    // Download via CHROME's own downloader, not the daemon. The video URL is bound to
-    // your logged-in douyin session (tk=webid signed); a cookieless curl from the daemon
-    // gets 403. Chrome downloads with your session/cookies, exactly like the player —
-    // so it just works. Goes to ~/Downloads.
-    const downloadId = await chrome.downloads.download({
-      url: grabbed.url,
-      filename: safeName,
-      conflictAction: "uniquify",
-      saveAs: false,
+    // The grab only ever returns a clean (unsigned) URL, which the daemon's curl CAN
+    // fetch (verified). So hand it to the daemon like any other download — history,
+    // cancel and quick-open all work natively.
+    const res = await fetch(`${DAEMON}/download-direct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: grabbed.url,
+        referer: site.referer,
+        filename: `${title}.mp4`,
+        pageUrl: currentTabUrl,
+      }),
     });
-    chrome.action.setBadgeText({ text: "✓" });
-    chrome.action.setBadgeBackgroundColor({ color: "#27ae60" });
-    setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3500);
-    showMsg(t("sent"), "success");
-    await addLocalHistory(currentTabUrl, title, safeName, downloadId);
+    if (res.status === 202) {
+      await onQueued(currentTabUrl, title);
+    } else {
+      chrome.action.setBadgeText({ text: "!" });
+      chrome.action.setBadgeBackgroundColor({ color: "#e67e22" });
+      showMsg(t("daemonError", { code: res.status }), "error");
+    }
   } catch (e) {
     chrome.action.setBadgeText({ text: "✕" });
     chrome.action.setBadgeBackgroundColor({ color: "#c0392b" });
-    showMsg((e && e.message) ? `${e.message}` : t("daemonOfflineMsg"), "error");
+    showMsg(t("daemonOfflineMsg"), "error");
   }
   resetBtn();
 }
@@ -502,20 +498,6 @@ async function onQueued(url, title) {
   showMsg(t("sent"), "success");
   await loadHistory();
   startPolling();
-}
-
-// For files Chrome downloaded directly (direct-grab sites): the daemon never sees them,
-// so record a completed entry in the local cache for the popup history to show.
-async function addLocalHistory(url, title, filename, downloadId) {
-  const entry = {
-    id: simpleHash(url), url, title: title || filename,
-    filename, filepath: "", status: "done",
-    timestamp: new Date().toISOString(), localDownload: true, downloadId,
-  };
-  const { [CACHE_KEY]: cached = [] } = await chrome.storage.local.get(CACHE_KEY);
-  const next = [entry, ...(cached || []).filter((e) => e.url !== url)].slice(0, 50);
-  await chrome.storage.local.set({ [CACHE_KEY]: next });
-  renderHistory(next);
 }
 
 async function onStartDaemon() {
