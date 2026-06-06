@@ -61,8 +61,27 @@ permissions and phone home. Xiaoer VideoLab takes the opposite bet:
 
 - **daemon** — Python standard-library `http.server`, listens on `127.0.0.1:7788`, started at login by `launchd`.
 - **extension** — Chrome MV3, a single toolbar button, grabs `tab.url` and POSTs it to the daemon.
-- **output** — `~/Downloads/<title> [<id>].mp4` (≤1080p mp4 by default; configurable).
+- **output** — `~/Downloads/<platform>_<title>_<date>.mp4` (≤1080p mp4 by default; configurable).
 - **log** — `~/Library/Logs/xiaoer-videolab.log`
+
+## ✅ What you can download
+
+Powered by yt-dlp's **1872 extractors** — most video sites work. A practical map:
+
+| | Sites |
+|---|---|
+| **✅ Tested & confirmed** | **YouTube · Vimeo · Bilibili (B站) · Douyin (抖音) · Xiaohongshu (小红书)** |
+| **✅ Supported** (yt-dlp extractor, same path) | X/Twitter · Weibo (微博) · Zhihu (知乎) · Ixigua (西瓜) · Instagram · Reddit · Dailymotion · Facebook · TikTok\* · …and ~1860 more |
+| **⚠️ Free content only** | Youku (优酷) · iQiyi (爱奇艺) — VIP / DRM-protected episodes can't be downloaded |
+| **❌ Not supported** | Kuaishou (快手) & Tencent Video (腾讯视频) — no extractor; **WeChat Channels (视频号)** — in-app & encrypted |
+
+> \* **TikTok / overseas sites** need a network that can reach them (a proxy in mainland China; note some datacenter IPs are blocked by TikTok's API).
+>
+> 🎯 **视频号 / 快手 / 小程序 / 直播流?** Those live inside apps and need packet-sniffing — use [**res-downloader**](https://github.com/putyy/res-downloader) for them. This tool focuses on the yt-dlp universe.
+
+> **抖音 & 小红书** use a special in-page grabber (yt-dlp can't read them), so click the button **while the video is open/playing** on the page.
+
+Notes: 平台 (platform) and 标题 (title) are auto-detected for the filename; 日期 (date) is the download day.
 
 ## TL;DR (if you've done this before)
 

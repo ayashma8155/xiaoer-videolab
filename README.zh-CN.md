@@ -58,8 +58,27 @@ Xiaoer VideoLab 反着来：
 
 - **daemon** —— Python 标准库 `http.server`，监听 `127.0.0.1:7788`，由 `launchd` 开机自启。
 - **extension** —— Chrome MV3，一个工具栏按钮，取 `tab.url` POST 给 daemon。
-- **产物** —— `~/Downloads/<标题> [<id>].mp4`（默认 ≤1080p mp4，可配置）。
+- **产物** —— `~/Downloads/<平台>_<标题>_<日期>.mp4`（默认 ≤1080p mp4，可配置）。
 - **日志** —— `~/Library/Logs/xiaoer-videolab.log`
+
+## ✅ 能下载哪些网站
+
+底层是 yt-dlp 的 **1872 个提取器**,绝大多数视频站都能下。实用对照表:
+
+| | 网站 |
+|---|---|
+| **✅ 已实测确认** | **YouTube · Vimeo · B站 · 抖音 · 小红书** |
+| **✅ 支持**(yt-dlp 有提取器,同一条路) | X/Twitter · 微博 · 知乎 · 西瓜视频 · Instagram · Reddit · Dailymotion · Facebook · TikTok\* · …还有约 1860 个 |
+| **⚠️ 仅免费内容** | 优酷 · 爱奇艺 —— VIP / DRM 付费剧集下不了 |
+| **❌ 不支持** | 快手、腾讯视频 —— 无提取器;**视频号** —— 微信 App 内 + 加密 |
+
+> \* **TikTok / 海外站**需要能正常访问它们的网络(国内需代理;注意部分机房 IP 会被 TikTok 的 API 拦截)。
+>
+> 🎯 **想下视频号 / 快手 / 小程序 / 直播流?** 这些藏在 App 里、要靠抓包,推荐用 [**res-downloader**](https://github.com/putyy/res-downloader)。本工具专注 yt-dlp 这一大类。
+
+> **抖音和小红书**用的是专门的「页面抠真链」(yt-dlp 读不到它们),所以请在视频**打开/播放着**的时候点按钮。
+
+说明:文件名里的**平台**和**标题**会自动识别,**日期**是下载当天。
 
 ## 急速版（装过同类工具的人）
 
