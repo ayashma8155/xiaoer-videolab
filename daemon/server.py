@@ -25,7 +25,7 @@ import re
 import subprocess
 import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 from typing import Optional
@@ -613,7 +613,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     log(f"{APP_NAME} daemon listening on http://{HOST}:{PORT}  (yt-dlp: {YT_DLP})")
-    server = HTTPServer((HOST, PORT), Handler)
+    # ThreadingHTTPServer (not plain HTTPServer): /probe runs yt-dlp --dump-json
+    # synchronously and can take many seconds, which on a single-threaded server
+    # blocks /history and /health and makes the popup falsely report "daemon down".
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

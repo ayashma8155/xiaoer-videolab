@@ -424,6 +424,8 @@ async function startDirectDownload(site) {
     const injection = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: site.grab,
+      world: "MAIN", // MUST run in the page's JS context — feed-page grabs read the
+                     // React fiber / __INITIAL_STATE__, which the isolated world can't see.
     });
     const grabbed = injection && injection[0] && injection[0].result;
     if (!grabbed || !grabbed.url) {
