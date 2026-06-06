@@ -36,7 +36,7 @@ if (chrome.action) {
       flashBadge("✕", "#c0392b");
       notify(
         APP,
-        `Can't reach the daemon (${e.message}). Run: launchctl list | grep videolab`
+        `Can't reach the daemon (${e.message}). Make sure the daemon is running.`
       );
     }
   });
