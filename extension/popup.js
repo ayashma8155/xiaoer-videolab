@@ -22,7 +22,7 @@ const LOCALES = {
     startFailed: "Start failed: {msg}", notInstalled: "Run install.sh first",
     daemonError: "Daemon returned {code}", daemonOfflineMsg: "Cannot reach daemon",
     douyinGrabbing: "Reading the playing video...",
-    douyinPlayFirst: "Play the video on the page first, then download",
+    douyinPlayFirst: "Couldn't read the video — refresh the page and try again",
     fileNotFound: "File no longer exists on disk",
     cancel: "Remove",
     justNow: "just now", minAgo: "{n} min ago", hrAgo: "{n} hr ago", dayAgo: "{n} day ago",
@@ -41,7 +41,7 @@ const LOCALES = {
     startFailed: "启动失败: {msg}", notInstalled: "需要先运行 install.sh",
     daemonError: "服务返回 {code}", daemonOfflineMsg: "无法连接到 daemon",
     douyinGrabbing: "正在读取正在播放的视频...",
-    douyinPlayFirst: "请先在页面上点开播放该视频，再点下载",
+    douyinPlayFirst: "没读取到视频，请刷新页面后重试",
     fileNotFound: "文件已不存在于磁盘",
     cancel: "移除",
     justNow: "刚刚", minAgo: "{n} 分钟前", hrAgo: "{n} 小时前", dayAgo: "{n} 天前",
@@ -319,12 +319,14 @@ function directSiteFor(url) {
   return DIRECT_SITES.find((s) => s.host.test(host)) || null;
 }
 
-// Injected into a Douyin tab. a_bogus blocks yt-dlp entirely, so we read the real
-// stream off the page. Two cases:
-//   • standalone /video/<id> page → the progressive URL is the <video>'s currentSrc
-//   • 精选/feed page → the video plays via MSE (blob:), so the real URL lives only in
-//     the React fiber of the playing <video>; walk up the fiber tree to find playAddr.
-async function grabDouyinStream() {
+// Injected into a Douyin tab (MAIN world). a_bogus blocks yt-dlp entirely, so we read
+// the real stream off the page. Two cases:
+//   • standalone /video/<id> page → progressive URL is the <video>'s currentSrc
+//   • 精选/feed page → videos are MSE blobs (no URL on the element, several preloaded).
+//     We find the React root anywhere in the DOM, walk the fiber tree, and pull the
+//     playAddr of the aweme whose id matches modal_id — so we get THIS video, not one
+//     of the ~40 preloaded ones. Crucially this does NOT depend on the video playing.
+function grabDouyinStream() {
   const pickSrc = () => {
     for (const v of document.querySelectorAll("video")) {
       const s = v.currentSrc || v.src || "";
@@ -333,54 +335,54 @@ async function grabDouyinStream() {
     return "";
   };
   let url = pickSrc();
-  if (!url) {
-    const v = document.querySelector("video");
-    if (v) { try { v.muted = true; await v.play(); } catch (e) {} }
-    await new Promise((r) => setTimeout(r, 1500));
-    url = pickSrc();
-  }
+  let title = "";
 
-  // Feed-page fallback: dig the playing video's React fiber for playAddr.
   if (!url) {
-    const vids = Array.from(document.querySelectorAll("video"));
-    const target = vids.find((v) => (v.currentSrc || "").startsWith("blob:")) || vids[0];
-    if (target) {
-      const key = Object.keys(target).find(
-        (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$")
+    const modalId =
+      (location.href.match(/modal_id=(\d+)/) || location.href.match(/\/video\/(\d+)/) || [])[1] || "";
+    // Find any React fiber root in the page.
+    let root = null;
+    const els = document.querySelectorAll("body *");
+    for (let i = 0; i < els.length; i++) {
+      const k = Object.keys(els[i]).find(
+        (x) => x.startsWith("__reactContainer$") || x.startsWith("__reactFiber$")
       );
+      if (k) { root = els[i][k]; break; }
+    }
+    if (root && modalId) {
+      let hit = "", hitTitle = "", scanned = 0;
       const dig = (o, d) => {
-        if (!o || typeof o !== "object" || d > 4) return "";
+        if (hit || !o || typeof o !== "object" || d > 3) return;
+        try {
+          if ((String(o.awemeId) === modalId || String(o.aweme_id) === modalId) && o.video) {
+            const pa =
+              o.video.playAddr || o.video.play_addr ||
+              (o.video.bitRateList && o.video.bitRateList[0] && o.video.bitRateList[0].playAddr);
+            if (pa) {
+              const u = Array.isArray(pa) ? (pa[0].src || pa[0].url) : (pa.urlList && pa.urlList[0]);
+              if (u) { hit = u; hitTitle = (o.desc || "").slice(0, 80); }
+            }
+          }
+        } catch (e) {}
         for (const k in o) {
-          try {
-            if ((k === "playAddr" || k === "play_addr") && o[k]) {
-              const a = o[k];
-              if (Array.isArray(a) && a[0]) {
-                return a[0].src || a[0].url || (a[0].url_list && a[0].url_list[0]) || "";
-              }
-            }
-            if (o[k] && typeof o[k] === "object") {
-              const r = dig(o[k], d + 1);
-              if (r) return r;
-            }
-          } catch (e) {}
+          try { if (o[k] && typeof o[k] === "object") dig(o[k], d + 1); } catch (e) {}
         }
-        return "";
       };
-      let node = key ? target[key] : null;
-      let hops = 0;
-      while (node && hops < 40 && !url) {
-        const props = node.memoizedProps || node.pendingProps;
-        if (props) {
-          const r = dig(props, 0);
-          if (r) url = r;
-        }
-        node = node.return;
-        hops++;
+      // Iterative fiber walk (avoids deep recursion / stack overflow).
+      const stack = [[root, 0]];
+      while (stack.length && !hit && scanned < 80000) {
+        const [node, depth] = stack.pop();
+        if (!node || depth > 200) continue;
+        scanned++;
+        if (node.memoizedProps) dig(node.memoizedProps, 0);
+        if (node.child) stack.push([node.child, depth + 1]);
+        if (node.sibling) stack.push([node.sibling, depth]);
       }
+      if (hit) { url = hit; title = hitTitle; }
     }
   }
 
-  const title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
+  if (!title) title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
   return { url, title };
 }
 
