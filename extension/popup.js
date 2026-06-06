@@ -270,7 +270,14 @@ function createItem(item) {
   `;
 
   const actionsDiv = el.querySelector(".item-actions");
-  if (item.status === "done" && item.filepath) {
+  if (item.status === "done" && item.localDownload) {
+    // File was downloaded by Chrome itself — open/reveal via the downloads API.
+    if (item.downloadId != null) {
+      addAction(actionsDiv, ICONS.play, t("play"), () => chrome.downloads.open(item.downloadId));
+      addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => chrome.downloads.show(item.downloadId));
+    }
+    addAction(actionsDiv, ICONS.redownload, t("redownload"), () => onDownload());
+  } else if (item.status === "done" && item.filepath) {
     addAction(actionsDiv, ICONS.play, t("play"), () => sendToDaemon("POST", "/open", { path: item.filepath }));
     addAction(actionsDiv, ICONS.reveal, t("openFolder"), () => sendToDaemon("POST", "/reveal", { path: item.filepath }));
     addAction(actionsDiv, ICONS.redownload, t("redownload"), () => startDownload(item.url, item.title));
@@ -445,27 +452,27 @@ async function startDirectDownload(site) {
       (currentTabUrl.match(/(?:video|explore|item)\/(\w+)/) ||
        currentTabUrl.match(/modal_id=(\w+)/) || [])[1] || "";
     const title = grabbed.title || currentTabTitle || (idFromUrl ? `${site.name}_${idFromUrl}` : site.name);
-    const res = await fetch(`${DAEMON}/download-direct`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: grabbed.url,
-        referer: site.referer,
-        filename: `${title}.mp4`,
-        pageUrl: currentTabUrl,
-      }),
+    const safeName = `${title}.mp4`.replace(/[\/\\:*?"<>|]+/g, "_").replace(/^\.+/, "").slice(0, 180);
+
+    // Download via CHROME's own downloader, not the daemon. The video URL is bound to
+    // your logged-in douyin session (tk=webid signed); a cookieless curl from the daemon
+    // gets 403. Chrome downloads with your session/cookies, exactly like the player —
+    // so it just works. Goes to ~/Downloads.
+    const downloadId = await chrome.downloads.download({
+      url: grabbed.url,
+      filename: safeName,
+      conflictAction: "uniquify",
+      saveAs: false,
     });
-    if (res.status === 202) {
-      await onQueued(currentTabUrl, title);
-    } else {
-      chrome.action.setBadgeText({ text: "!" });
-      chrome.action.setBadgeBackgroundColor({ color: "#e67e22" });
-      showMsg(t("daemonError", { code: res.status }), "error");
-    }
+    chrome.action.setBadgeText({ text: "✓" });
+    chrome.action.setBadgeBackgroundColor({ color: "#27ae60" });
+    setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3500);
+    showMsg(t("sent"), "success");
+    await addLocalHistory(currentTabUrl, title, safeName, downloadId);
   } catch (e) {
     chrome.action.setBadgeText({ text: "✕" });
     chrome.action.setBadgeBackgroundColor({ color: "#c0392b" });
-    showMsg(t("daemonOfflineMsg"), "error");
+    showMsg((e && e.message) ? `${e.message}` : t("daemonOfflineMsg"), "error");
   }
   resetBtn();
 }
@@ -485,6 +492,20 @@ async function onQueued(url, title) {
   showMsg(t("sent"), "success");
   await loadHistory();
   startPolling();
+}
+
+// For files Chrome downloaded directly (direct-grab sites): the daemon never sees them,
+// so record a completed entry in the local cache for the popup history to show.
+async function addLocalHistory(url, title, filename, downloadId) {
+  const entry = {
+    id: simpleHash(url), url, title: title || filename,
+    filename, filepath: "", status: "done",
+    timestamp: new Date().toISOString(), localDownload: true, downloadId,
+  };
+  const { [CACHE_KEY]: cached = [] } = await chrome.storage.local.get(CACHE_KEY);
+  const next = [entry, ...(cached || []).filter((e) => e.url !== url)].slice(0, 50);
+  await chrome.storage.local.set({ [CACHE_KEY]: next });
+  renderHistory(next);
 }
 
 async function onStartDaemon() {
