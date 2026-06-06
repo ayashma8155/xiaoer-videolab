@@ -81,9 +81,11 @@ First time? Follow every step below. It takes about 5 minutes and you only do it
 
 ### What you need
 
-- A Mac (macOS). The background service uses `launchd`.
+- **macOS** (background service via `launchd`) **or Windows 10/11** (via Task Scheduler).
 - A Chromium-based browser — Chrome, Arc, Edge, Brave, or Dia.
 - About 5 minutes.
+
+> **On Windows?** Parts A & B below are for macOS. Jump to **[🪟 On Windows](#-on-windows-do-this-instead-of-parts-a--b)**, then come back for Part C.
 
 You do **not** need to know how to code. You will copy-paste a few commands.
 
@@ -137,6 +139,29 @@ Next: load the browser extension
 
 That means the background downloader is installed and will start automatically every time you log in.
 You never touch the Terminal again.
+
+### 🪟 On Windows? (do this instead of Parts A & B)
+
+The browser steps (Part C & D) are identical on every OS — only the engine + service install differs.
+
+**W1.** Install the engine. Open **PowerShell** and run (uses [winget](https://aka.ms/getwinget), built into Win 10/11):
+
+```powershell
+winget install Python.Python.3.11 yt-dlp.yt-dlp ffmpeg
+```
+
+**W2.** Install Xiaoer VideoLab. Either grab the code with the green **Code → Download ZIP** button (then unzip), or in PowerShell:
+
+```powershell
+git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+cd xiaoer-videolab
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+The installer registers a **login-start task** and asks which browser to pull cookies from (`edge`/`chrome`).
+To uninstall later: `powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1`.
+
+Now continue with **Part C** below — loading the toolbar button is the same everywhere.
 
 ### Part C · Add the toolbar button
 

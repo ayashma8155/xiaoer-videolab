@@ -78,11 +78,13 @@ cd xiaoer-videolab && ./scripts/install.sh
 
 ### 你需要什么
 
-- 一台 Mac（macOS）。后台服务用 `launchd`。
+- **macOS**（后台服务用 `launchd`）**或 Windows 10/11**（用任务计划程序）。
 - 任意 Chromium 内核浏览器 —— Chrome / Arc / Edge / Brave / Dia。
 - 大约 5 分钟。
 
 **你不需要会编程**，只是复制粘贴几条命令而已。
+
+> **用 Windows？** 下面第一、二部分是 macOS 的。请跳到 **[🪟 Windows 安装](#-windows-安装替代第一二部分)**，装完再回来看第三部分。
 
 ### 第一部分 · 装「下载引擎」（只装一次）
 
@@ -131,6 +133,29 @@ Next: load the browser extension
 <!-- 截图位: docs/images/02-install-success.png -->
 
 这说明后台下载服务装好了，以后**每次开机自动启动**，你再也不用碰终端。
+
+### 🪟 Windows 安装（替代第一、二部分）
+
+浏览器那两步（第三、四部分）所有系统都一样，**只有引擎 + 服务的装法不同**。
+
+**W1.** 装引擎。打开 **PowerShell**，运行（用 Win10/11 自带的 [winget](https://aka.ms/getwinget)）：
+
+```powershell
+winget install Python.Python.3.11 yt-dlp.yt-dlp ffmpeg
+```
+
+**W2.** 装小耳抓视频。可以点 GitHub 绿色的 **Code → Download ZIP** 下载解压，或在 PowerShell 里：
+
+```powershell
+git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+cd xiaoer-videolab
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+安装脚本会注册一个**开机自启任务**，并问你从哪个浏览器取 cookie（`edge`/`chrome`）。
+以后想卸载：`powershell -ExecutionPolicy Bypass -File scripts\uninstall.ps1`。
+
+装完接着看下面的**第三部分** —— 加工具栏按钮所有系统都一样。
 
 ### 第三部分 · 加上工具栏按钮
 
