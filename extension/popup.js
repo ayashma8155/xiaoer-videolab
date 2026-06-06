@@ -295,24 +295,32 @@ function addAction(parent, svg, tooltip, handler) {
 
 async function onDownload() {
   if (!currentTabUrl) return;
-  // Douyin's anti-bot (a_bogus) blocks yt-dlp at the network layer, so we can't
-  // hand the page URL to the daemon. Instead we read the real stream the page is
-  // already playing and download that directly. See startDouyinDownload().
-  if (isDirectGrabSite(currentTabUrl)) {
-    await startDouyinDownload();
+  // Some sites' anti-bot blocks yt-dlp at the network layer (Douyin's a_bogus), or
+  // serve the video via MSE so there's no plain file URL (Xiaohongshu). For those we
+  // read the real stream off the page and download it directly. See DIRECT_SITES.
+  const site = directSiteFor(currentTabUrl);
+  if (site) {
+    await startDirectDownload(site);
   } else {
     await startDownload(currentTabUrl, currentTabTitle);
   }
 }
 
-// Sites whose real video URL we must read off the page rather than via yt-dlp.
-function isDirectGrabSite(url) {
-  return /(^|\.)douyin\.com$/i.test(safeUrl(url, (u) => u.hostname) || "");
+// ── direct-grab sites ─────────────────────────────────
+// Each site supplies a `grab` function that is injected into the page (so it must be
+// fully self-contained) and returns { url, title }. Add a new site = one entry here.
+const DIRECT_SITES = [
+  { name: "douyin", host: /(^|\.)douyin\.com$/i, referer: "https://www.douyin.com/", grab: grabDouyinStream },
+  { name: "xiaohongshu", host: /(^|\.)xiaohongshu\.com$/i, referer: "https://www.xiaohongshu.com/", grab: grabXhsStream },
+];
+
+function directSiteFor(url) {
+  const host = safeUrl(url, (u) => u.hostname) || "";
+  return DIRECT_SITES.find((s) => s.host.test(host)) || null;
 }
 
-// Injected into the active Douyin tab. Reads the CDN stream the <video> is playing
-// (skipping the decoy douyinstatic placeholder and blob: src). Self-contained — it
-// runs in the page, so it can't reference anything from popup.js.
+// Injected into a Douyin tab. Reads the CDN stream the <video> is playing (skipping
+// the decoy douyinstatic placeholder and blob: src). a_bogus blocks yt-dlp entirely.
 async function grabDouyinStream() {
   const pick = () => {
     for (const v of document.querySelectorAll("video")) {
@@ -323,7 +331,6 @@ async function grabDouyinStream() {
   };
   let url = pick();
   if (!url) {
-    // Nudge playback so the real stream loads, then retry once.
     const v = document.querySelector("video");
     if (v) { try { v.muted = true; await v.play(); } catch (e) {} }
     await new Promise((r) => setTimeout(r, 1800));
@@ -333,20 +340,46 @@ async function grabDouyinStream() {
   return { url, title };
 }
 
-async function startDouyinDownload() {
+// Injected into a Xiaohongshu note. The <video> src is a blob: (MSE), so the real
+// CDN url isn't on the element — it lives in window.__INITIAL_STATE__. Self-contained.
+async function grabXhsStream() {
+  try {
+    const st = window.__INITIAL_STATE__;
+    const nd = st && st.note && st.note.noteDetailMap;
+    if (nd) {
+      for (const id in nd) {
+        const note = nd[id] && nd[id].note;
+        const stream = note && note.video && note.video.media && note.video.media.stream;
+        if (stream) {
+          for (const codec of ["h264", "h265", "av1", "h266"]) {
+            const arr = stream[codec];
+            if (arr && arr[0] && arr[0].masterUrl) {
+              const title = (note.title || note.desc || "").replace(/[\r\n]+/g, " ").slice(0, 80).trim();
+              return { url: arr[0].masterUrl, title };
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return { url: "", title: "" };
+}
+
+async function startDirectDownload(site) {
   const btn = document.getElementById("downloadBtn");
+  const dlIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`;
   const resetBtn = () => {
-    btn.disabled = /^https?:/.test(currentTabUrl) ? false : true;
-    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${t("download")}`;
+    btn.disabled = !/^https?:/.test(currentTabUrl);
+    btn.innerHTML = `${dlIcon} ${t("download")}`;
   };
   btn.disabled = true;
-  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${t("douyinGrabbing")}`;
+  btn.innerHTML = `${dlIcon} ${t("douyinGrabbing")}`;
 
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     const injection = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: grabDouyinStream,
+      func: site.grab,
     });
     const grabbed = injection && injection[0] && injection[0].result;
     if (!grabbed || !grabbed.url) {
@@ -355,16 +388,16 @@ async function startDouyinDownload() {
       return;
     }
 
-    // Douyin's document.title is often empty mid-render; fall back to the tab
-    // title, then to the numeric video id from the URL so files never collide.
-    const videoId = (currentTabUrl.match(/video\/(\d+)/) || [])[1] || "";
-    const title = grabbed.title || currentTabTitle || (videoId ? `douyin_${videoId}` : "douyin");
+    // Page title is often empty mid-render; fall back to the tab title, then to the
+    // id from the URL (douyin /video/<id>, xhs /explore|/item/<id>) so files don't collide.
+    const idFromUrl = (currentTabUrl.match(/(?:video|explore|item)\/(\w+)/) || [])[1] || "";
+    const title = grabbed.title || currentTabTitle || (idFromUrl ? `${site.name}_${idFromUrl}` : site.name);
     const res = await fetch(`${DAEMON}/download-direct`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: grabbed.url,
-        referer: "https://www.douyin.com/",
+        referer: site.referer,
         filename: `${title}.mp4`,
         pageUrl: currentTabUrl,
       }),
