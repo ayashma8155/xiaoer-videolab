@@ -16,3 +16,6 @@ venv/
 # Editor
 .vscode/
 .idea/
+
+# Chrome 加载解包扩展时自动生成,不入库
+extension/_metadata/
