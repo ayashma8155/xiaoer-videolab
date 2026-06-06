@@ -393,7 +393,8 @@ function grabDouyinStream() {
   // Prefer an unsigned URL; only fall back to a signed one if that's all we have.
   const url = candidates.find((u) => !isSigned(u)) || candidates[0] || "";
   if (!title) title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
-  return { url, title };
+  const nClean = candidates.filter((u) => !isSigned(u)).length;
+  return { url, title, debug: { nTotal: candidates.length, nClean, pickedSigned: isSigned(url) } };
 }
 
 // Injected into a Xiaohongshu note. The <video> src is a blob: (MSE), so the real
@@ -453,6 +454,15 @@ async function startDirectDownload(site) {
        currentTabUrl.match(/modal_id=(\w+)/) || [])[1] || "";
     const title = grabbed.title || currentTabTitle || (idFromUrl ? `${site.name}_${idFromUrl}` : site.name);
     const safeName = `${title}.mp4`.replace(/[\/\\:*?"<>|]+/g, "_").replace(/^\.+/, "").slice(0, 180);
+
+    // Diagnostic beacon: the daemon's access log captures this GET (path + query), so we
+    // can see what the grab found in *this* browser (clean vs signed candidates) without
+    // needing to inspect Chrome directly. Fire-and-forget; ignore failures.
+    try {
+      const dbg = grabbed.debug || {};
+      const host = (grabbed.url.match(/^https?:\/\/([^/]+)/) || [])[1] || "";
+      fetch(`${DAEMON}/debug?grab=${encodeURIComponent(JSON.stringify({ ...dbg, host }))}`).catch(() => {});
+    } catch (e) {}
 
     // Download via CHROME's own downloader, not the daemon. The video URL is bound to
     // your logged-in douyin session (tk=webid signed); a cookieless curl from the daemon
