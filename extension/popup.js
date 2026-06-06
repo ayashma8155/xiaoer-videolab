@@ -13,7 +13,7 @@ const LOCALES = {
     history: "History", emptyTitle: "No downloads yet",
     emptyHint: "Click below to download a video",
     offlineTitle: "Daemon not running",
-    offlineHint: "Click below to start the service",
+    offlineHint: "Reopen this window; if it persists, restart the service",
     startBtn: "Start Service", download: "Download Video",
     detecting: "Detecting...", files: "{n} file(s)",
     done: "Done", downloading: "Downloading", queued: "Queued", failed: "Failed",
@@ -32,7 +32,7 @@ const LOCALES = {
     history: "记录", emptyTitle: "还没有下载记录",
     emptyHint: "点击下方按钮下载当前页视频",
     offlineTitle: "Daemon 未运行",
-    offlineHint: "点击下方按钮启动下载服务",
+    offlineHint: "重新打开此窗口；若仍未运行，请重启服务",
     startBtn: "启动服务", download: "下载视频",
     detecting: "检测中...", files: "{n} 个文件",
     done: "完成", downloading: "下载中", queued: "等待中", failed: "失败",
@@ -319,23 +319,67 @@ function directSiteFor(url) {
   return DIRECT_SITES.find((s) => s.host.test(host)) || null;
 }
 
-// Injected into a Douyin tab. Reads the CDN stream the <video> is playing (skipping
-// the decoy douyinstatic placeholder and blob: src). a_bogus blocks yt-dlp entirely.
+// Injected into a Douyin tab. a_bogus blocks yt-dlp entirely, so we read the real
+// stream off the page. Two cases:
+//   • standalone /video/<id> page → the progressive URL is the <video>'s currentSrc
+//   • 精选/feed page → the video plays via MSE (blob:), so the real URL lives only in
+//     the React fiber of the playing <video>; walk up the fiber tree to find playAddr.
 async function grabDouyinStream() {
-  const pick = () => {
+  const pickSrc = () => {
     for (const v of document.querySelectorAll("video")) {
       const s = v.currentSrc || v.src || "";
       if (/zjcdn|douyinvod|\/video\/tos\//.test(s)) return s;
     }
     return "";
   };
-  let url = pick();
+  let url = pickSrc();
   if (!url) {
     const v = document.querySelector("video");
     if (v) { try { v.muted = true; await v.play(); } catch (e) {} }
-    await new Promise((r) => setTimeout(r, 1800));
-    url = pick();
+    await new Promise((r) => setTimeout(r, 1500));
+    url = pickSrc();
   }
+
+  // Feed-page fallback: dig the playing video's React fiber for playAddr.
+  if (!url) {
+    const vids = Array.from(document.querySelectorAll("video"));
+    const target = vids.find((v) => (v.currentSrc || "").startsWith("blob:")) || vids[0];
+    if (target) {
+      const key = Object.keys(target).find(
+        (k) => k.startsWith("__reactFiber$") || k.startsWith("__reactInternalInstance$")
+      );
+      const dig = (o, d) => {
+        if (!o || typeof o !== "object" || d > 4) return "";
+        for (const k in o) {
+          try {
+            if ((k === "playAddr" || k === "play_addr") && o[k]) {
+              const a = o[k];
+              if (Array.isArray(a) && a[0]) {
+                return a[0].src || a[0].url || (a[0].url_list && a[0].url_list[0]) || "";
+              }
+            }
+            if (o[k] && typeof o[k] === "object") {
+              const r = dig(o[k], d + 1);
+              if (r) return r;
+            }
+          } catch (e) {}
+        }
+        return "";
+      };
+      let node = key ? target[key] : null;
+      let hops = 0;
+      while (node && hops < 40 && !url) {
+        const props = node.memoizedProps || node.pendingProps;
+        if (props) {
+          const r = dig(props, 0);
+          if (r) url = r;
+        }
+        node = node.return;
+        hops++;
+      }
+    }
+  }
+
   const title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
   return { url, title };
 }
@@ -390,7 +434,9 @@ async function startDirectDownload(site) {
 
     // Page title is often empty mid-render; fall back to the tab title, then to the
     // id from the URL (douyin /video/<id>, xhs /explore|/item/<id>) so files don't collide.
-    const idFromUrl = (currentTabUrl.match(/(?:video|explore|item)\/(\w+)/) || [])[1] || "";
+    const idFromUrl =
+      (currentTabUrl.match(/(?:video|explore|item)\/(\w+)/) ||
+       currentTabUrl.match(/modal_id=(\w+)/) || [])[1] || "";
     const title = grabbed.title || currentTabTitle || (idFromUrl ? `${site.name}_${idFromUrl}` : site.name);
     const res = await fetch(`${DAEMON}/download-direct`, {
       method: "POST",
