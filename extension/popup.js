@@ -21,6 +21,8 @@ const LOCALES = {
     sent: "Download request sent", started: "Daemon started",
     startFailed: "Start failed: {msg}", notInstalled: "Run install.sh first",
     daemonError: "Daemon returned {code}", daemonOfflineMsg: "Cannot reach daemon",
+    douyinGrabbing: "Reading the playing video...",
+    douyinPlayFirst: "Play the video on the page first, then download",
     fileNotFound: "File no longer exists on disk",
     cancel: "Remove",
     justNow: "just now", minAgo: "{n} min ago", hrAgo: "{n} hr ago", dayAgo: "{n} day ago",
@@ -38,6 +40,8 @@ const LOCALES = {
     sent: "下载请求已发送", started: "Daemon 已启动",
     startFailed: "启动失败: {msg}", notInstalled: "需要先运行 install.sh",
     daemonError: "服务返回 {code}", daemonOfflineMsg: "无法连接到 daemon",
+    douyinGrabbing: "正在读取正在播放的视频...",
+    douyinPlayFirst: "请先在页面上点开播放该视频，再点下载",
     fileNotFound: "文件已不存在于磁盘",
     cancel: "移除",
     justNow: "刚刚", minAgo: "{n} 分钟前", hrAgo: "{n} 小时前", dayAgo: "{n} 天前",
@@ -291,7 +295,110 @@ function addAction(parent, svg, tooltip, handler) {
 
 async function onDownload() {
   if (!currentTabUrl) return;
-  await startDownload(currentTabUrl, currentTabTitle);
+  // Douyin's anti-bot (a_bogus) blocks yt-dlp at the network layer, so we can't
+  // hand the page URL to the daemon. Instead we read the real stream the page is
+  // already playing and download that directly. See startDouyinDownload().
+  if (isDirectGrabSite(currentTabUrl)) {
+    await startDouyinDownload();
+  } else {
+    await startDownload(currentTabUrl, currentTabTitle);
+  }
+}
+
+// Sites whose real video URL we must read off the page rather than via yt-dlp.
+function isDirectGrabSite(url) {
+  return /(^|\.)douyin\.com$/i.test(safeUrl(url, (u) => u.hostname) || "");
+}
+
+// Injected into the active Douyin tab. Reads the CDN stream the <video> is playing
+// (skipping the decoy douyinstatic placeholder and blob: src). Self-contained — it
+// runs in the page, so it can't reference anything from popup.js.
+async function grabDouyinStream() {
+  const pick = () => {
+    for (const v of document.querySelectorAll("video")) {
+      const s = v.currentSrc || v.src || "";
+      if (/zjcdn|douyinvod|\/video\/tos\//.test(s)) return s;
+    }
+    return "";
+  };
+  let url = pick();
+  if (!url) {
+    // Nudge playback so the real stream loads, then retry once.
+    const v = document.querySelector("video");
+    if (v) { try { v.muted = true; await v.play(); } catch (e) {} }
+    await new Promise((r) => setTimeout(r, 1800));
+    url = pick();
+  }
+  const title = (document.title || "").replace(/[-—|]\s*抖音.*$/, "").trim();
+  return { url, title };
+}
+
+async function startDouyinDownload() {
+  const btn = document.getElementById("downloadBtn");
+  const resetBtn = () => {
+    btn.disabled = /^https?:/.test(currentTabUrl) ? false : true;
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${t("download")}`;
+  };
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${t("douyinGrabbing")}`;
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const injection = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: grabDouyinStream,
+    });
+    const grabbed = injection && injection[0] && injection[0].result;
+    if (!grabbed || !grabbed.url) {
+      showMsg(t("douyinPlayFirst"), "error");
+      resetBtn();
+      return;
+    }
+
+    // Douyin's document.title is often empty mid-render; fall back to the tab
+    // title, then to the numeric video id from the URL so files never collide.
+    const videoId = (currentTabUrl.match(/video\/(\d+)/) || [])[1] || "";
+    const title = grabbed.title || currentTabTitle || (videoId ? `douyin_${videoId}` : "douyin");
+    const res = await fetch(`${DAEMON}/download-direct`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: grabbed.url,
+        referer: "https://www.douyin.com/",
+        filename: `${title}.mp4`,
+        pageUrl: currentTabUrl,
+      }),
+    });
+    if (res.status === 202) {
+      await onQueued(currentTabUrl, title);
+    } else {
+      chrome.action.setBadgeText({ text: "!" });
+      chrome.action.setBadgeBackgroundColor({ color: "#e67e22" });
+      showMsg(t("daemonError", { code: res.status }), "error");
+    }
+  } catch (e) {
+    chrome.action.setBadgeText({ text: "✕" });
+    chrome.action.setBadgeBackgroundColor({ color: "#c0392b" });
+    showMsg(t("daemonOfflineMsg"), "error");
+  }
+  resetBtn();
+}
+
+// Shared "download was queued" bookkeeping: persist a pending entry, flash the
+// badge, refresh the list, start polling. Used by both the yt-dlp and direct paths.
+async function onQueued(url, title) {
+  const id = simpleHash(url);
+  const proxyTitle = title || safeUrl(url, (u) => u.hostname.replace(/^www\./, ""));
+  const entry = { id, url, title: proxyTitle, status: "queued", timestamp: new Date().toISOString() };
+  const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
+  pending.unshift(entry);
+  await chrome.storage.local.set({ [STORAGE_KEY]: pending });
+  chrome.action.setBadgeText({ text: "✓" });
+  chrome.action.setBadgeBackgroundColor({ color: "#27ae60" });
+  setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3500);
+  showMsg(t("sent"), "success");
+  await loadHistory();
+  startPolling();
 }
 
 async function onStartDaemon() {
@@ -351,18 +458,7 @@ async function startDownload(url, titleHint) {
       body: JSON.stringify({ url }),
     });
     if (res.status === 202) {
-      const id = simpleHash(url);
-      const proxyTitle = titleHint || safeUrl(url, (u) => u.hostname.replace(/^www\./, ""));
-      const entry = { id, url, title: proxyTitle, status: "queued", timestamp: new Date().toISOString() };
-      const { [STORAGE_KEY]: pending = [] } = await chrome.storage.local.get(STORAGE_KEY);
-      pending.unshift(entry);
-      await chrome.storage.local.set({ [STORAGE_KEY]: pending });
-      chrome.action.setBadgeText({ text: "✓" });
-      chrome.action.setBadgeBackgroundColor({ color: "#27ae60" });
-      setTimeout(() => chrome.action.setBadgeText({ text: "" }), 3500);
-      showMsg(t("sent"), "success");
-      await loadHistory();
-      startPolling();
+      await onQueued(url, titleHint);
     } else {
       const txt = await res.text();
       chrome.action.setBadgeText({ text: "!" });

@@ -277,6 +277,89 @@ def download(url: str) -> None:
         })
 
 
+def _safe_filename(name: str) -> str:
+    """Sanitize a user/page-supplied filename: strip path separators and illegal
+    characters so it can't escape DOWNLOADS or break the filesystem."""
+    name = name.replace("/", "_").replace("\\", "_")
+    name = re.sub(r'[<>:"|?*\x00-\x1f]', "_", name).strip()
+    name = name.lstrip(".") or "video"
+    return name[:180]
+
+
+def download_direct(direct_url: str, referer: str, filename: str, page_url: str) -> None:
+    """Download an already-resolved media URL via curl, sending a Referer header.
+
+    Used for sites whose anti-bot (e.g. Douyin's a_bogus signing) blocks yt-dlp at
+    the network layer, but whose real stream URL the browser extension can read off
+    the playing page. Tracked in _active_downloads (keyed by the page URL) and writes
+    history exactly like download(), so /cancel and the popup history both just work.
+    """
+    log(f"[start-direct] {page_url}")
+    notify(APP_NAME, f"Downloading {filename[:80]}")
+    DOWNLOADS.mkdir(parents=True, exist_ok=True)
+    out = DOWNLOADS / (f"{PREFIX}{filename}" if PREFIX else filename)
+    cmd = [
+        "curl", "-fL", "--retry", "2",
+        "-H", f"Referer: {referer}",
+        "-H", "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+              "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36",
+        "-o", str(out), direct_url,
+    ]
+    # macOS quirk: a stale SSL_CERT_FILE in the daemon env makes curl's HTTPS fail.
+    env = os.environ.copy()
+    env.pop("SSL_CERT_FILE", None)
+    timestamp = datetime.datetime.now().isoformat()
+
+    def _fail_history() -> None:
+        _append_history({
+            "id": _simple_hash(page_url), "url": page_url, "title": "",
+            "filename": "", "filepath": "", "filesize": None,
+            "timestamp": datetime.datetime.now().isoformat(), "status": "failed",
+        })
+
+    log("$ " + " ".join(shlex.quote(c) for c in cmd))
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, env=env)
+        with _active_downloads_lock:
+            _active_downloads[page_url] = proc
+        try:
+            _, stderr = proc.communicate(timeout=3600)
+        finally:
+            with _active_downloads_lock:
+                _active_downloads.pop(page_url, None)
+
+        ok = proc.returncode == 0 and out.is_file() and out.stat().st_size > 0
+        if ok:
+            size = out.stat().st_size
+            log(f"[done-direct] {out.name} ({size} bytes)")
+            notify(f"{APP_NAME} ✅", out.name)
+            _append_history({
+                "id": _simple_hash(page_url), "url": page_url,
+                "title": Path(filename).stem, "filename": out.name,
+                "filepath": str(out.resolve()), "filesize": size,
+                "timestamp": timestamp, "status": "done",
+            })
+        else:
+            # Drop a zero-byte / partial file left by a failed or cancelled curl.
+            if out.exists() and (not out.is_file() or out.stat().st_size == 0):
+                out.unlink(missing_ok=True)
+            err = (stderr or "").strip().splitlines()
+            msg = err[-1] if err else f"curl rc={proc.returncode}"
+            log(f"[fail-direct] {page_url}: {msg}")
+            notify(f"{APP_NAME} ❌", msg[:120])
+            _fail_history()
+    except subprocess.TimeoutExpired:
+        cancel_download(page_url)
+        log(f"[timeout-direct] {page_url}")
+        notify(f"{APP_NAME} ⏱", "Download timed out (1 hour)")
+        _fail_history()
+    except Exception as e:
+        log(f"[err-direct] {page_url}: {e}")
+        notify(f"{APP_NAME} ❌", str(e)[:120])
+        _fail_history()
+
+
 class Handler(BaseHTTPRequestHandler):
     def _cors(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -403,6 +486,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/cancel":
             self._handle_cancel()
             return
+        if path == "/download-direct":
+            self._handle_download_direct()
+            return
         if path != "/download":
             self.send_response(404)
             self._cors()
@@ -436,6 +522,54 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         threading.Thread(target=download, args=(url,), daemon=True).start()
+
+        self.send_response(202)
+        self._cors()
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"queued":true}')
+
+    def _handle_download_direct(self) -> None:
+        """Queue a direct (browser-extracted) media URL for download with a Referer.
+
+        Payload: {url, referer, filename, pageUrl}. `url` is the resolved stream the
+        extension read off the page; `pageUrl` is the original site link (used as the
+        history/cancel key). Same Origin guard as /download — web pages can't trigger us.
+        """
+        origin = self.headers.get("Origin", "")
+        if origin.startswith(("http://", "https://")):
+            self.send_response(403)
+            self._cors()
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"forbidden: web-page origins cannot trigger downloads")
+            log(f"[blocked] web origin {origin} tried to POST /download-direct")
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        raw = self.rfile.read(length).decode("utf-8", "replace")
+        try:
+            data = json.loads(raw)
+            direct_url = data["url"]
+            if not isinstance(direct_url, str) or not direct_url.startswith(("http://", "https://")):
+                raise ValueError("url must be http(s)")
+            page_url = data.get("pageUrl") or direct_url
+            referer = data.get("referer", "")
+            filename = _safe_filename(data.get("filename") or "video.mp4")
+            if not filename.lower().endswith((".mp4", ".webm", ".mkv", ".mov", ".m4v")):
+                filename += ".mp4"
+        except Exception as e:
+            self.send_response(400)
+            self._cors()
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(f"bad request: {e}".encode())
+            return
+
+        threading.Thread(
+            target=download_direct,
+            args=(direct_url, referer, filename, page_url),
+            daemon=True,
+        ).start()
 
         self.send_response(202)
         self._cors()
