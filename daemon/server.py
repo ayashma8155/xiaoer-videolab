@@ -145,12 +145,37 @@ def cancel_download(url: str) -> bool:
     return False
 
 
+_PLATFORM_MAP = [
+    ("douyin", "抖音"), ("iesdouyin", "抖音"),
+    ("xiaohongshu", "小红书"), ("xhslink", "小红书"), ("xhscdn", "小红书"),
+    ("bilibili", "B站"), ("b23.tv", "B站"),
+    ("youtube", "YouTube"), ("youtu.be", "YouTube"),
+    ("weibo", "微博"), ("zhihu", "知乎"), ("ixigua", "西瓜视频"),
+    ("twitter", "X"), ("x.com", "X"), ("vimeo", "Vimeo"),
+    ("instagram", "Instagram"), ("tiktok", "TikTok"), ("kuaishou", "快手"),
+    ("youku", "优酷"), ("iqiyi", "爱奇艺"), ("facebook", "Facebook"),
+    ("reddit", "Reddit"), ("dailymotion", "Dailymotion"),
+]
+
+
+def _platform_name(url: str) -> str:
+    """Friendly platform label from a URL host, for filenames (平台_标题_时间)."""
+    host = (urlparse(url).hostname or "").lower()
+    for key, name in _PLATFORM_MAP:
+        if key in host:
+            return name
+    parts = host.replace("www.", "").split(".")
+    return parts[0] if parts and parts[0] else "video"
+
+
 def download(url: str) -> None:
     log(f"[start] {url}")
     notify(APP_NAME, f"Downloading {url[:80]}")
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
-    name_prefix = f"{PREFIX}" if PREFIX else ""
-    output_tpl = str(DOWNLOADS / f"{name_prefix}%(title).160s [%(id)s].%(ext)s")
+    # Filename = 平台_标题_下载日期 (no 小耳 branding — files get shared with others).
+    platform = _platform_name(url)
+    date = datetime.datetime.now().strftime("%Y%m%d")
+    output_tpl = str(DOWNLOADS / f"{platform}_%(title).120s_{date}.%(ext)s")
     fmt = (
         f"bv*[height<={MAX_HEIGHT}][ext=mp4]+ba[ext=m4a]/"
         f"b[height<={MAX_HEIGHT}][ext=mp4]/"
@@ -297,7 +322,12 @@ def download_direct(direct_url: str, referer: str, filename: str, page_url: str)
     log(f"[start-direct] {page_url}")
     notify(APP_NAME, f"Downloading {filename[:80]}")
     DOWNLOADS.mkdir(parents=True, exist_ok=True)
-    out = DOWNLOADS / (f"{PREFIX}{filename}" if PREFIX else filename)
+    # Filename = 平台_标题_下载日期 (no 小耳 branding — files get shared with others).
+    ext = Path(filename).suffix or ".mp4"
+    title = Path(filename).stem
+    platform = _platform_name(page_url)
+    date = datetime.datetime.now().strftime("%Y%m%d")
+    out = DOWNLOADS / (_safe_filename(f"{platform}_{title}_{date}") + ext)
     cmd = [
         # --noproxy '*' : these are domestic CDNs (xhscdn is plain http, zjcdn etc).
         # Without it the request goes through the system proxy (Clash) and hangs.
