@@ -185,6 +185,8 @@ def download(url: str) -> None:
     cmd = [
         YT_DLP,
         "--no-playlist",
+        "--playlist-items", "1",   # if the URL is a profile/playlist, take just one — don't churn
+        "--socket-timeout", "30",  # don't hang forever on a stalled connection
         "--no-mtime",
         "-f", fmt,
         "--merge-output-format", "mp4",
@@ -459,7 +461,8 @@ class Handler(BaseHTTPRequestHandler):
 
             try:
                 result = subprocess.run(
-                    [YT_DLP, "--dump-json", "--no-playlist", "--playlist-items", "1", target_url],
+                    [YT_DLP, "--dump-json", "--no-playlist", "--playlist-items", "1",
+                     "--socket-timeout", "20", target_url],
                     capture_output=True, text=True, timeout=15
                 )
                 if result.returncode == 0:
