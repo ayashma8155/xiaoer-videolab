@@ -104,14 +104,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
       setBtnLabel(t("detecting"), true);
     }
-    probeVideo(currentTabUrl).then(hasVideo => {
-      if (hasVideo === true) {
+    // ALWAYS re-enable the button when the probe finishes — even on timeout/error
+    // (hasVideo === null). Otherwise a slow/failed probe leaves it stuck on "检测中".
+    probeVideo(currentTabUrl)
+      .then(hasVideo => {
         setBtnLabel(t("download"), false);
-      } else if (hasVideo === false) {
-        setBtnLabel(t("download"), false);
-        btn.title = "No video detected, you can still try";
-      }
-    });
+        if (hasVideo === false) btn.title = "No video detected, you can still try";
+      })
+      .catch(() => setBtnLabel(t("download"), false));
+    // Hard safety net: never let "检测中" linger more than 10s no matter what.
+    setTimeout(() => { if (btn.disabled && /^https?:/.test(currentTabUrl)) setBtnLabel(t("download"), false); }, 10000);
   } else {
     btn.disabled = true;
     btn.title = "Not an http(s) page";
